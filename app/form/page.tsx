@@ -158,53 +158,125 @@ export default function FormPage() {
 
   const handlePurchaseSubmit = async (data: BasicFormData & { selectedPlan: Plan; selectedPayment: PaymentMethod }) => {
     try {
+      console.log('Starting form submission...')
+      
+      // Upload files first if they exist
+      const uploadedFiles = []
+      let photoUrl = null
+
+      // Upload photo if exists
+      if (data.photo) {
+        try {
+          const photoExtension = data.photo.name.split('.').pop()
+          const photoPath = `photos/${user.id}_${Date.now()}.${photoExtension}`
+          
+          const { data: photoData, error: photoError } = await supabase.storage
+            .from('profile-files')
+            .upload(photoPath, data.photo)
+
+          if (photoError) {
+            console.error('Error uploading photo:', photoError)
+            // Continue without photo if upload fails
+          } else {
+            const { data: { publicUrl } } = supabase.storage
+              .from('profile-files')
+              .getPublicUrl(photoPath)
+            photoUrl = publicUrl
+            console.log('Photo uploaded successfully:', publicUrl)
+          }
+        } catch (photoUploadError) {
+          console.error('Photo upload failed:', photoUploadError)
+          // Continue without photo
+        }
+      }
+
+      // Upload portfolio files if they exist
+      if (data.portfolioFiles && data.portfolioFiles.length > 0) {
+        for (const file of data.portfolioFiles) {
+          try {
+            const fileExtension = file.name.split('.').pop()
+            const filePath = `portfolio/${user.id}_${Date.now()}_${file.name}`
+            
+            const { data: fileData, error: fileError } = await supabase.storage
+              .from('profile-files')
+              .upload(filePath, file)
+
+            if (fileError) {
+              console.error('Error uploading file:', fileError)
+            } else {
+              const { data: { publicUrl } } = supabase.storage
+                .from('profile-files')
+                .getPublicUrl(filePath)
+              uploadedFiles.push({
+                name: file.name,
+                url: publicUrl,
+                type: file.type,
+                size: file.size
+              })
+              console.log('Portfolio file uploaded:', file.name)
+            }
+          } catch (fileUploadError) {
+            console.error('File upload failed for:', file.name, fileUploadError)
+            // Continue with other files
+          }
+        }
+      }
+
+      // Prepare data for database
+      const profileData = {
+        user_id: user.id,
+        full_name: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        date_of_birth: data.dateOfBirth,
+        city: data.city,
+        linkedin_url: data.linkedinUrl,
+        education: data.education || [],
+        experience: data.experience || [],
+        projects: data.projects || [],
+        skills: data.skills || [],
+        languages: data.languages || [],
+        certifications: data.certifications || [],
+        preferred_roles: data.preferredRoles || [],
+        preferred_industries: data.preferredIndustries || [],
+        availability_date: data.availabilityDate || null,
+        desired_job_type: data.desiredJobType || null,
+        willing_to_relocate: data.willingToRelocate || false,
+        expected_salary_range: data.expectedSalaryRange || null,
+        remote_ok: data.remoteOk || false,
+        photo_url: photoUrl,
+        portfolio_files: uploadedFiles,
+        data_usage_consent: data.dataUsageConsent,
+        marketing_consent: data.marketingConsent || false,
+        selected_plan: data.selectedPlan.id,
+        plan_name: data.selectedPlan.name,
+        plan_price: data.selectedPlan.price,
+        plan_currency: data.selectedPlan.currency,
+        payment_method: data.selectedPayment.id,
+        payment_status: 'pending',
+        updated_at: new Date().toISOString()
+      }
+
+      console.log('Saving profile data:', profileData)
+
       // Save to Supabase with comprehensive data
-      const { error } = await supabase
+      const { data: savedData, error } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
-          full_name: data.fullName,
-          email: data.email,
-          phone: data.phone,
-          date_of_birth: data.dateOfBirth,
-          city: data.city,
-          linkedin_url: data.linkedinUrl,
-          education: data.education,
-          experience: data.experience,
-          projects: data.projects,
-          skills: data.skills,
-          languages: data.languages,
-          certifications: data.certifications,
-          preferred_roles: data.preferredRoles,
-          preferred_industries: data.preferredIndustries,
-          availability_date: data.availabilityDate,
-          desired_job_type: data.desiredJobType,
-          willing_to_relocate: data.willingToRelocate,
-          expected_salary_range: data.expectedSalaryRange,
-          remote_ok: data.remoteOk,
-          portfolio_files: [], // Will handle file uploads separately
-          data_usage_consent: data.dataUsageConsent,
-          marketing_consent: data.marketingConsent,
-          selected_plan: data.selectedPlan.id,
-          plan_name: data.selectedPlan.name,
-          plan_price: data.selectedPlan.price,
-          plan_currency: data.selectedPlan.currency,
-          payment_method: data.selectedPayment.id,
-          payment_status: 'pending',
-          updated_at: new Date().toISOString()
-        })
+        .upsert(profileData)
+        .select()
 
       if (error) {
         console.error('Error saving data:', error)
-        alert('حدث خطأ أثناء حفظ البيانات. يرجى المحاولة مرة أخرى.')
+        alert(`حدث خطأ أثناء حفظ البيانات: ${error.message}. يرجى المحاولة مرة أخرى.`)
         return
       }
 
+      console.log('Data saved successfully:', savedData)
       console.log('Purchase submitted and saved:', data)
       setSubmittedData(data)
       setIsSubmitted(true)
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Unexpected error:', error)
       alert('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.')
     }
   }

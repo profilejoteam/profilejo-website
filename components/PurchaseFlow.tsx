@@ -254,9 +254,6 @@ export default function PurchaseFlow({ onSubmit }: PurchaseFlowProps) {
             <h2 className="text-xl font-bold text-gray-900 mb-1">
               {steps[currentStep - 1].title}
             </h2>
-            <p className="text-gray-600 text-sm">
-              {steps[currentStep - 1].description}
-            </p>
           </div>
         </div>
       </div>
