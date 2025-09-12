@@ -2,17 +2,20 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import NewFormSection from '@/components/NewFormSection'
+import PurchaseFlow from '../../components/PurchaseFlow'
 import SuccessSection from '@/components/SuccessSection'
 import { supabase } from '@/lib/supabase'
 
 interface BasicFormData {
+  // Basic required fields
   fullName: string
   dateOfBirth: string
   city: string
   phone: string
   email: string
   linkedinUrl: string
+  
+  // Education (minimum 1 required)
   education: Array<{
     degree: string
     major: string
@@ -24,7 +27,10 @@ interface BasicFormData {
     gpa: string
     gpaScale: string
     notes: string
+    diplomaFile?: File
   }>
+  
+  // Experience (repeatable)
   experience: Array<{
     jobTitle: string
     organization: string
@@ -33,10 +39,84 @@ interface BasicFormData {
     endDate: string
     isPresent: boolean
     responsibilities: string
+    achievements: string
     employmentType: string
+    referenceName: string
+    referenceContact: string
+    proofFile?: File
   }>
+
+  // Projects (repeatable)
+  projects: Array<{
+    title: string
+    description: string
+    role: string
+    startDate: string
+    endDate: string
+    technologies: string[]
+    demoLink: string
+    repositoryUrl: string
+    isPublic: boolean
+    files: File[]
+  }>
+
+  // Skills
+  skills: Array<{
+    name: string
+    proficiency: string
+    yearsOfExperience: number
+  }>
+
+  // Languages
+  languages: Array<{
+    language: string
+    proficiency: string
+  }>
+
+  // Certifications
+  certifications: Array<{
+    title: string
+    issuer: string
+    issueDate: string
+    expiryDate: string
+    credentialId: string
+    credentialUrl: string
+    certificateFile?: File
+  }>
+
+  // Job preferences
+  preferredRoles: string[]
+  preferredIndustries: string[]
+  availabilityDate: string
+  desiredJobType: string
+  willingToRelocate: boolean
+  expectedSalaryRange: string
+  remoteOk: boolean
+
+  // Files
+  portfolioFiles: File[]
+  photo?: File
+
+  // Legal consents
   dataUsageConsent: boolean
   marketingConsent: boolean
+}
+
+interface Plan {
+  id: string
+  name: string
+  price: number
+  currency: string
+  duration: string
+  description: string
+  features: string[]
+}
+
+interface PaymentMethod {
+  id: string
+  name: string
+  description: string
+  processingTime: string
 }
 
 export default function FormPage() {
@@ -76,9 +156,9 @@ export default function FormPage() {
     router.push('/auth')
   }
 
-  const handleFormSubmit = async (data: BasicFormData) => {
+  const handlePurchaseSubmit = async (data: BasicFormData & { selectedPlan: Plan; selectedPayment: PaymentMethod }) => {
     try {
-      // Save to Supabase
+      // Save to Supabase with comprehensive data
       const { error } = await supabase
         .from('profiles')
         .upsert({
@@ -91,8 +171,26 @@ export default function FormPage() {
           linkedin_url: data.linkedinUrl,
           education: data.education,
           experience: data.experience,
+          projects: data.projects,
+          skills: data.skills,
+          languages: data.languages,
+          certifications: data.certifications,
+          preferred_roles: data.preferredRoles,
+          preferred_industries: data.preferredIndustries,
+          availability_date: data.availabilityDate,
+          desired_job_type: data.desiredJobType,
+          willing_to_relocate: data.willingToRelocate,
+          expected_salary_range: data.expectedSalaryRange,
+          remote_ok: data.remoteOk,
+          portfolio_files: [], // Will handle file uploads separately
           data_usage_consent: data.dataUsageConsent,
           marketing_consent: data.marketingConsent,
+          selected_plan: data.selectedPlan.id,
+          plan_name: data.selectedPlan.name,
+          plan_price: data.selectedPlan.price,
+          plan_currency: data.selectedPlan.currency,
+          payment_method: data.selectedPayment.id,
+          payment_status: 'pending',
           updated_at: new Date().toISOString()
         })
 
@@ -102,7 +200,7 @@ export default function FormPage() {
         return
       }
 
-      console.log('Form submitted and saved:', data)
+      console.log('Purchase submitted and saved:', data)
       setSubmittedData(data)
       setIsSubmitted(true)
     } catch (error) {
@@ -159,8 +257,8 @@ export default function FormPage() {
         </div>
       </header>
 
-      {/* Form Section */}
-      <NewFormSection onSubmit={handleFormSubmit} />
+      {/* Purchase Flow */}
+      <PurchaseFlow onSubmit={handlePurchaseSubmit} />
     </div>
   )
 }
