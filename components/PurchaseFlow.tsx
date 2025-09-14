@@ -221,7 +221,7 @@ export default function PurchaseFlow({ onSubmit }: PurchaseFlowProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Progress Bar */}
-      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-20 z-40">
         <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between mb-4">
             {steps.map((step, index) => (
@@ -249,11 +249,17 @@ export default function PurchaseFlow({ onSubmit }: PurchaseFlowProps) {
               </div>
             ))}
           </div>
-          
+        </div>
+      </div>
+
+      {/* Step Title */}
+      <div className="bg-gray-50 py-6">
+        <div className="container mx-auto px-6">
           <div className="text-center">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">
+            <h2 className="text-2xl font-bold text-gray-900">
               {steps[currentStep - 1].title}
             </h2>
+            <p className="text-gray-600 mt-2">الخطوة {currentStep} من {steps.length}</p>
           </div>
         </div>
       </div>

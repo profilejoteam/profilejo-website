@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { FaUser, FaGraduationCap, FaBriefcase, FaLink, FaArrowRight, FaArrowLeft, FaPlus, FaTrash, FaUpload, FaCheck, FaProjectDiagram, FaCogs, FaLanguage, FaCertificate, FaCamera } from 'react-icons/fa'
+import SmartAssistantBot from './SmartAssistantBotSimple'
 
 interface ComprehensiveFormData {
   // Basic required fields
@@ -307,6 +308,11 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
 
   const updateFormData = (field: keyof ComprehensiveFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  // دالة للبوت الذكي لتحديث البيانات
+  const handleBotDataUpdate = (data: Record<string, any>) => {
+    setFormData(prev => ({ ...prev, ...data }))
   }
 
   const addEducation = () => {
@@ -1585,6 +1591,14 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
           )}
         </div>
       </div>
+      
+      {/* Smart Assistant Bot */}
+      <SmartAssistantBot 
+        formData={formData}
+        onFormDataUpdate={handleBotDataUpdate}
+        currentStep={currentStep}
+        isVisible={true}
+      />
     </div>
   )
 }

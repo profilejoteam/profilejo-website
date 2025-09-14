@@ -1,5 +1,6 @@
 import './globals.css'
-import type { Metadata } from 'next'
+import type { Metadata }from 'next'
+import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
   title: 'بروفايل - هوية مهنية كاملة',
@@ -28,6 +29,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className="font-arabic antialiased">
+        <Navbar />
         <div className="min-h-screen bg-hero-gradient-alt">
           {children}
         </div>

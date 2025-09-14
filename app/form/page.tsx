@@ -297,38 +297,7 @@ export default function FormPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">ب</span>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900">بروفايل</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-gray-600 text-sm">
-                مرحباً، {user?.email}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="text-gray-500 hover:text-red-600 transition-colors text-sm"
-              >
-                تسجيل الخروج
-              </button>
-              <a 
-                href="/"
-                className="text-gray-600 hover:text-primary-600 transition-colors flex items-center gap-2"
-              >
-                ← العودة للصفحة الرئيسية
-              </a>
-            </div>
-          </div>
-        </div>
-      </header>
-
+    <div className="min-h-screen bg-gray-50 pt-20">
       {/* Purchase Flow */}
       <PurchaseFlow onSubmit={handlePurchaseSubmit} />
     </div>

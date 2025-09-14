@@ -19,7 +19,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen pt-20">
       <HeroSection />
       <ServicesSection />
       <PricingSection onPlanSelect={handlePlanSelect} />

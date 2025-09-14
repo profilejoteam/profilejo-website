@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { FaCheck, FaCrown, FaStar, FaRocket } from 'react-icons/fa'
 import { useState } from 'react'
+import Ribbon from './Ribbon'
 
 interface Plan {
   id: string
@@ -126,18 +127,13 @@ export default function PricingSection({ onPlanSelect, selectedPlan }: PricingSe
               `}
               onClick={() => onPlanSelect(plan)}
             >
-              {/* Popular Badge */}
+
+              {/* Ribbon for popular plan */}
               {plan.popular && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.5, type: "spring" }}
-                    className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-6 py-2 rounded-full text-sm font-bold flex items-center gap-2"
-                  >
-                    <FaStar className="text-xs" />
-                    الأكثر شعبية
-                  </motion.div>
+                <div className="absolute right-0 top-0 z-30">
+                  <div className="w-44">
+                    <Ribbon text="الأكثر شعبية" color="bg-pink-600" />
+                  </div>
                 </div>
               )}
 

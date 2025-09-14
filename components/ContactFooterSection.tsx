@@ -63,7 +63,7 @@ export default function ContactFooterSection() {
   return (
     <>
       {/* Contact Section */}
-      <section className="py-20 px-6 bg-white">
+      <section id="contact" className="py-20 px-6 bg-white">
         <div className="container mx-auto max-w-7xl">
           <motion.div
             initial={{ opacity: 0, y: 50 }}
