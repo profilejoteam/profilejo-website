@@ -193,15 +193,17 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
 
   const validatePhone = (phone: string): string => {
     if (!phone.trim()) return 'رقم الهاتف مطلوب'
-    const phoneRegex = /^(\+962|0)?7[789]\d{7}$/
+    // قبول 10 أرقام فقط بدءاً من 7
+    const phoneRegex = /^7[789]\d{7}$/
     if (!phoneRegex.test(phone.replace(/\s/g, ''))) {
-      return 'أدخل رقم هاتف صحيح (مثال: +962778123456)'
+      return 'أدخل رقم هاتف صحيح (10 أرقام تبدأ بـ 7، مثال: 0778123456)'
     }
     return ''
   }
 
   const validateLinkedIn = (url: string): string => {
-    if (!url.trim()) return 'رابط LinkedIn مطلوب'
+    // جعل LinkedIn اختياري
+    if (!url.trim()) return '' // لا خطأ إذا كان فارغ
     if (!url.includes('linkedin.com/in/') && !url.includes('linkedin.com/pub/')) {
       return 'أدخل رابط LinkedIn صحيح'
     }
@@ -226,7 +228,7 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
         if (!formData.fullName.trim()) newErrors.fullName = 'الاسم الكامل مطلوب'
         if (!formData.email.trim()) newErrors.email = 'البريد الإلكتروني مطلوب'
         if (!formData.phone.trim()) newErrors.phone = 'رقم الهاتف مطلوب'
-        if (!formData.linkedinUrl.trim()) newErrors.linkedinUrl = 'رابط LinkedIn مطلوب'
+        // LinkedIn أصبح اختياري - لا نتحقق من وجوده
         if (!formData.dateOfBirth) newErrors.dateOfBirth = 'تاريخ الميلاد مطلوب'
         if (!formData.city) newErrors.city = 'المدينة مطلوبة'
         
@@ -435,7 +437,7 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            رابط LinkedIn *
+            رابط LinkedIn (اختياري)
           </label>
           <input
             type="url"

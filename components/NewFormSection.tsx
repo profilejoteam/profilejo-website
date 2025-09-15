@@ -87,15 +87,17 @@ const validateFullName = (name: string): string => {
 
 const validatePhone = (phone: string): string => {
   if (!phone.trim()) return 'رقم الهاتف مطلوب'
-  const phoneRegex = /^(\+962|0)?7[789]\d{7}$/
+  // قبول 10 أرقام فقط بدءاً من 7
+  const phoneRegex = /^7[789]\d{7}$/
   if (!phoneRegex.test(phone.replace(/\s/g, ''))) {
-    return 'أدخل رقم هاتف صحيح (مثال: +962778123456)'
+    return 'أدخل رقم هاتف صحيح (10 أرقام تبدأ بـ 7، مثال: 0778123456)'
   }
   return ''
 }
 
 const validateLinkedIn = (url: string): string => {
-  if (!url.trim()) return 'رابط LinkedIn مطلوب'
+  // جعل LinkedIn اختياري
+  if (!url.trim()) return '' // لا خطأ إذا كان فارغ
   if (!url.includes('linkedin.com/in/') && !url.includes('linkedin.com/pub/')) {
     return 'أدخل رابط LinkedIn صحيح'
   }
@@ -206,7 +208,7 @@ const PersonalInfoStep = ({
         </div>
 
         <div>
-          <label className="block text-gray-700 font-medium mb-2">رابط LinkedIn *</label>
+          <label className="block text-gray-700 font-medium mb-2">رابط LinkedIn (اختياري)</label>
           <input
             type="url"
             className={`w-full p-4 rounded-xl bg-white border ${
@@ -339,8 +341,11 @@ export default function NewFormSection({ onSubmit }: { onSubmit: (data: BasicFor
       if (!formData.email) newErrors.email = 'البريد الإلكتروني مطلوب'
       else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'البريد الإلكتروني غير صحيح'
 
-      const linkedinError = validateLinkedIn(formData.linkedinUrl)
-      if (linkedinError) newErrors.linkedinUrl = linkedinError
+      // LinkedIn اختياري - نتحقق من التنسيق فقط إذا كان مدخل
+      if (formData.linkedinUrl.trim()) {
+        const linkedinError = validateLinkedIn(formData.linkedinUrl)
+        if (linkedinError) newErrors.linkedinUrl = linkedinError
+      }
     }
 
     setErrors(newErrors)

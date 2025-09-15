@@ -1,13 +1,13 @@
 import './globals.css'
-import type { Metadata }from 'next'
+import type { Metadata, Viewport } from 'next'
 import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('http://localhost:3000'),
   title: 'بروفايل - هوية مهنية كاملة',
   description: 'هوية مهنية كاملة تجهزك لسوق العمل. سجل الآن وابدأ ببناء بروفايلك المهني',
   keywords: 'بروفايل, سيرة ذاتية, وظائف, العمل, مهني, LinkedIn',
   authors: [{ name: 'Profile Team' }],
-  viewport: 'width=device-width, initial-scale=1',
   robots: 'index, follow',
   openGraph: {
     title: 'بروفايل - هوية مهنية كاملة',
@@ -15,6 +15,17 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'ar_SA',
   },
+  // منع المتصفح من cache الصفحات
+  other: {
+    'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({

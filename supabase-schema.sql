@@ -13,7 +13,7 @@ CREATE TABLE profiles (
   city VARCHAR(50) NOT NULL CHECK (char_length(city) >= 2),
   phone VARCHAR(20) NOT NULL,
   email VARCHAR(255) NOT NULL,
-  linkedin_url TEXT NOT NULL,
+  linkedin_url TEXT, -- جعل LinkedIn اختياري
   
   -- Education (JSON array)
   education JSONB NOT NULL DEFAULT '[]',

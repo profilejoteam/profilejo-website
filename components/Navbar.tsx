@@ -139,6 +139,13 @@ export default function Navbar() {
           <div className="hidden md:block">
             {user ? (
               <div className="flex items-center gap-4">
+                <Link href="/admin" className={`text-sm font-medium px-3 py-1 rounded-lg transition-all duration-300 ${
+                  scrolled 
+                    ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' 
+                    : 'text-blue-300 hover:text-white hover:bg-blue-500/20'
+                }`}>
+                  ⚙️ لوحة الإدارة
+                </Link>
                 <span className={`text-sm font-medium ${
                   scrolled ? 'text-gray-700' : 'text-white'
                 }`}>
