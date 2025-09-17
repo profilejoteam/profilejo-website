@@ -28,49 +28,75 @@ export default function AdminLayout({
         return
       }
 
-      // التحقق من صلاحيات الإدارة من جدول admins
-      let adminCheck = null
-      let error = null
+      console.log('🔍 تحقق من الجلسة:', session.user.email)
+
+      // حل سريع: إذا كان الإيميل هو المدير الأساسي
+      if (session.user.email === 'amrabdullah19876@gmail.com') {
+        console.log('✅ المدير الأساسي - السماح بالدخول مباشرة')
+        setIsAdmin(true)
+        return
+      }
+
+      // التحقق من جدول admins (بدون RLS)
+      let adminCheck = false
       
       try {
-        const { data, error: adminError } = await supabase
+        const { data: adminData, error: adminError } = await supabase
           .from('admins')
           .select('id, email, is_active')
           .eq('email', session.user.email)
           .eq('is_active', true)
-          .single()
         
-        adminCheck = data
-        error = adminError
-      } catch (tableError) {
-        // إذا كان جدول admins غير موجود، تحقق من جدول profiles
-        console.warn('جدول admins غير موجود، سيتم التحقق من جدول profiles')
+        console.log('📋 نتائج admins:', adminData, adminError)
         
-        const { data: profileCheck, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, email, is_admin')
-          .eq('email', session.user.email)
-          .eq('is_admin', true)
-          .single()
-        
-        if (!profileError && profileCheck) {
-          adminCheck = profileCheck
-          error = null
-        } else {
-          error = profileError
+        if (adminData && adminData.length > 0) {
+          console.log('✅ تم العثور على صلاحيات في admins')
+          adminCheck = true
+        }
+      } catch (adminTableError) {
+        console.warn('⚠️ جدول admins غير متاح:', adminTableError)
+      }
+      
+      // التحقق من جدول profiles كبديل
+      if (!adminCheck) {
+        try {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, email, is_admin')
+            .eq('email', session.user.email)
+            .eq('is_admin', true)
+          
+          console.log('📋 نتائج profiles:', profileData, profileError)
+          
+          if (profileData && profileData.length > 0) {
+            console.log('✅ تم العثور على صلاحيات في profiles')
+            adminCheck = true
+          }
+        } catch (profileTableError) {
+          console.warn('⚠️ جدول profiles غير متاح:', profileTableError)
         }
       }
 
-      if (error || !adminCheck) {
-        console.error('Not an admin user:', session.user.email)
-        console.error('Error details:', error)
+      if (!adminCheck) {
+        console.error('❌ لا توجد صلاحيات إدارية للمستخدم:', session.user.email)
+        alert('ليس لديك صلاحيات إدارية. يرجى التواصل مع المدير.')
         router.push('/')
         return
       }
 
+      console.log('✅ تم التحقق من الصلاحيات بنجاح')
       setIsAdmin(true)
     } catch (error) {
-      console.error('Error checking admin access:', error)
+      console.error('خطأ في التحقق من صلاحيات الإدارة:', error)
+      
+      // إذا كان الإيميل هو الإيميل الرئيسي، اسمح بالدخول كحل احتياطي
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user?.email === 'amrabdullah19876@gmail.com') {
+        console.log('🔑 السماح بالدخول للمدير الرئيسي')
+        setIsAdmin(true)
+        return
+      }
+      
       router.push('/')
     } finally {
       setLoading(false)
