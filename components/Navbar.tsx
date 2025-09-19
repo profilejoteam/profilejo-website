@@ -24,7 +24,6 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [user, setUser] = useState<any>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -42,61 +41,16 @@ export default function Navbar() {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-      
-      // Check admin status
-      if (user?.email) {
-        checkAdminStatus(user.email)
-      }
     }
     getUser()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null)
-      if (session?.user?.email) {
-        checkAdminStatus(session.user.email)
-      } else {
-        setIsAdmin(false)
-      }
     })
 
     return () => subscription.unsubscribe()
   }, [])
-
-  const checkAdminStatus = async (email: string) => {
-    // Quick check for main admin
-    if (email === 'amrabdullah19876@gmail.com') {
-      setIsAdmin(true)
-      return
-    }
-
-    try {
-      // Check admins table
-      const { data: adminData } = await supabase
-        .from('admins')
-        .select('is_active')
-        .eq('email', email)
-        .eq('is_active', true)
-        .single()
-
-      if (adminData) {
-        setIsAdmin(true)
-        return
-      }
-
-      // Check profiles table as fallback
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('email', email)
-        .eq('is_admin', true)
-        .single()
-
-      setIsAdmin(!!profileData)
-    } catch (error) {
-      setIsAdmin(false)
-    }
-  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -185,15 +139,13 @@ export default function Navbar() {
           <div className="hidden md:block">
             {user ? (
               <div className="flex items-center gap-4">
-                {isAdmin && (
-                  <Link href="/admin" className={`text-sm font-medium px-3 py-1 rounded-lg transition-all duration-300 ${
-                    scrolled 
-                      ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' 
-                      : 'text-blue-300 hover:text-white hover:bg-blue-500/20'
-                  }`}>
-                    ⚙️ لوحة الإدارة
-                  </Link>
-                )}
+                <Link href="/admin" className={`text-sm font-medium px-3 py-1 rounded-lg transition-all duration-300 ${
+                  scrolled 
+                    ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' 
+                    : 'text-blue-300 hover:text-white hover:bg-blue-500/20'
+                }`}>
+                  ⚙️ لوحة الإدارة
+                </Link>
                 <span className={`text-sm font-medium ${
                   scrolled ? 'text-gray-700' : 'text-white'
                 }`}>
@@ -280,18 +232,6 @@ export default function Navbar() {
                       <div className="text-center text-sm text-gray-700 font-medium mb-3 bg-gray-50 py-2 rounded-lg">
                         مرحباً، {user.email?.split('@')[0]}
                       </div>
-                      {isAdmin && (
-                        <button
-                          onClick={() => {
-                            setIsOpen(false)
-                            router.push('/admin')
-                          }}
-                          className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-600 transition-all duration-300 mb-2"
-                        >
-                          <FaCog />
-                          لوحة الإدارة
-                        </button>
-                      )}
                       <button
                         onClick={() => {
                           setIsOpen(false)
