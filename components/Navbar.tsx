@@ -232,6 +232,19 @@ export default function Navbar() {
                       <div className="text-center text-sm text-gray-700 font-medium mb-3 bg-gray-50 py-2 rounded-lg">
                         مرحباً، {user.email?.split('@')[0]}
                       </div>
+                      
+                      {/* Admin Button for Mobile */}
+                      <button
+                        onClick={() => {
+                          setIsOpen(false)
+                          router.push('/admin')
+                        }}
+                        className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-600 transition-all duration-300"
+                      >
+                        <FaCog />
+                        لوحة الإدارة
+                      </button>
+                      
                       <button
                         onClick={() => {
                           setIsOpen(false)

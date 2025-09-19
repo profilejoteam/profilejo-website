@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { 
   Users, 
   UserPlus, 
@@ -53,6 +54,19 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState('30')
   const [refreshing, setRefreshing] = useState(false)
+
+const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 640)
+    }
+    
+    checkIfMobile()
+    window.addEventListener('resize', checkIfMobile)
+    
+    return () => window.removeEventListener('resize', checkIfMobile)
+  }, [])
 
   useEffect(() => {
     fetchAnalytics()
@@ -127,12 +141,12 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
+      <div className="min-h-screen bg-gray-50 px-4 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">جاري تحميل البيانات...</p>
+              <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+              <p className="text-gray-600 text-sm sm:text-base">جاري تحميل البيانات...</p>
             </div>
           </div>
         </div>
@@ -142,13 +156,13 @@ export default function AnalyticsPage() {
 
   if (!analytics) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
+      <div className="min-h-screen bg-gray-50 px-4 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-12">
-            <p className="text-gray-600">فشل في تحميل البيانات</p>
+            <p className="text-gray-600 text-sm sm:text-base">فشل في تحميل البيانات</p>
             <button 
               onClick={fetchAnalytics}
-              className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              className="mt-4 px-3 py-2 sm:px-4 sm:py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm sm:text-base"
             >
               إعادة المحاولة
             </button>
@@ -194,49 +208,73 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Data Warning Banner */}
-      {analytics && analytics.summary.totalUsers === 0 && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+      <div className="max-w-7xl mx-auto py-4 px-4 sm:py-6 sm:px-6 lg:px-8">
+        {/* Breadcrumb */}
+        <nav className="flex mb-4 sm:mb-6" aria-label="Breadcrumb">
+          <ol className="inline-flex items-center space-x-1 md:space-x-3 space-x-reverse">
+            <li className="inline-flex items-center">
+              <Link
+                href="/admin"
+                className="inline-flex items-center text-xs sm:text-sm font-medium text-gray-700 hover:text-purple-600"
+              >
+                <svg className="w-3 h-3 sm:w-4 sm:h-4 ml-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
                 </svg>
+                الرئيسية
+              </Link>
+            </li>
+            <li>
+              <div className="flex items-center">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"></path>
+                </svg>
+                <span className="mr-1 text-xs sm:text-sm font-medium text-gray-500 md:mr-2">التحليلات</span>
               </div>
-              <div className="ml-3 flex-1">
-                <p className="text-sm text-yellow-700">
-                  <strong>تشخيص البيانات:</strong> لا يمكن العثور على بيانات في جدول <code className="bg-yellow-100 px-1 rounded">profiles</code>.
-                </p>
-                <div className="mt-2">
-                  <button 
-                    onClick={() => {
-                      // فتح وحدة التحكم وتشغيل اختبار
-                      console.clear()
-                      console.log('🔍 بدء تشخيص قاعدة البيانات...')
-                      
-                      // اختبار API
-                      fetch('/api/analytics?days=30')
-                        .then(res => res.json())
-                        .then(data => {
-                          console.log('📊 استجابة API:', data)
-                          if (data.error) {
-                            console.error('❌ خطأ في API:', data.error)
-                            console.log('💡 تفاصيل:', data.details)
-                          } else if (data.debug) {
-                            console.log('🔍 معلومات التشخيص:', data.debug)
-                          }
-                        })
-                        .catch(err => console.error('❌ خطأ في طلب API:', err))
-                    }}
-                    className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-2 py-1 rounded mr-2"
-                  >
-                    🔍 تشغيل تشخيص
-                  </button>
-                  <span className="text-xs text-yellow-600">
-                    أو افتح وحدة التحكم (F12) وانسخ محتوى <code>database-check.js</code>
-                  </span>
-                </div>
+            </li>
+          </ol>
+        </nav>
+
+        {/* Data Warning Banner */}
+      {analytics && analytics.summary.totalUsers === 0 && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 sm:p-4 mb-4 mx-4 sm:mx-0 rounded-lg sm:rounded-none">
+          <div className="flex flex-col sm:flex-row">
+            <div className="flex-shrink-0 mb-2 sm:mb-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="sm:ml-3 flex-1">
+              <p className="text-xs sm:text-sm text-yellow-700">
+                <strong>تشخيص البيانات:</strong> لا يمكن العثور على بيانات في جدول <code className="bg-yellow-100 px-1 rounded text-xs">profiles</code>.
+              </p>
+              <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                <button 
+                  onClick={() => {
+                    // فتح وحدة التحكم وتشغيل اختبار
+                    console.clear()
+                    console.log('🔍 بدء تشخيص قاعدة البيانات...')
+                    
+                    // اختبار API
+                    fetch('/api/analytics?days=30')
+                      .then(res => res.json())
+                      .then(data => {
+                        console.log('📊 استجابة API:', data)
+                        if (data.error) {
+                          console.error('❌ خطأ في API:', data.error)
+                          console.log('💡 تفاصيل:', data.details)
+                        } else if (data.debug) {
+                          console.log('🔍 معلومات التشخيص:', data.debug)
+                        }
+                      })
+                      .catch(err => console.error('❌ خطأ في طلب API:', err))
+                  }}
+                  className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-2 py-1 rounded"
+                >
+                  🔍 تشغيل تشخيص
+                </button>
+                <span className="text-xs text-yellow-600">
+                  أو افتح وحدة التحكم (F12) وانسخ محتوى <code>database-check.js</code>
+                </span>
               </div>
             </div>
           </div>
@@ -245,46 +283,43 @@ export default function AnalyticsPage() {
       
       {/* Success Banner */}
       {analytics && analytics.summary.totalUsers > 0 && (
-        <div className="bg-green-50 border-l-4 border-green-400 p-4">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-green-700">
-                  <strong>✅ البيانات محمّلة بنجاح!</strong> تم العثور على {analytics.summary.totalUsers} مستخدم في قاعدة البيانات.
-                  {analytics.cityStats.length > 0 && ` توزيع على ${analytics.cityStats.length} مدينة مختلفة.`}
-                </p>
-              </div>
+        <div className="bg-green-50 border-l-4 border-green-400 p-3 sm:p-4 mb-4 mx-4 sm:mx-0 rounded-lg sm:rounded-none">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-xs sm:text-sm text-green-700">
+                <strong>✅ البيانات محمّلة بنجاح!</strong> تم العثور على {analytics.summary.totalUsers} مستخدم في قاعدة البيانات.
+                {analytics.cityStats.length > 0 && ` توزيع على ${analytics.cityStats.length} مدينة مختلفة.`}
+              </p>
             </div>
           </div>
         </div>
       )}
       
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <BarChart3 className="w-6 h-6 text-purple-600" />
-                لوحة التحليلات
-              </h1>
-              <p className="text-gray-600 mt-1">
-                نظرة شاملة على أداء المنصة والمستخدمين
-              </p>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              {/* Date Range Selector */}
-              <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
+      <div className="bg-white border-b border-gray-200 px-3 sm:px-6 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+              لوحة التحليلات
+            </h1>
+            <p className="text-gray-600 mt-1 text-sm sm:text-base">
+              نظرة شاملة على أداء المنصة والمستخدمين
+            </p>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            {/* Date Range Selector */}
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+            >
                 <option value="7">آخر 7 أيام</option>
                 <option value="30">آخر 30 يوم</option>
                 <option value="90">آخر 3 أشهر</option>
@@ -295,25 +330,24 @@ export default function AnalyticsPage() {
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 text-sm"
               >
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                تحديث
+                <span className="hidden sm:inline">تحديث</span>
               </button>
               
               {/* Export Button */}
-              <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+              <button className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">
                 <Download className="w-4 h-4" />
-                تصدير
+                <span className="hidden sm:inline">تصدير</span>
               </button>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="px-3 sm:px-6 space-y-4 sm:space-y-6">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <KPICard
             title="إجمالي المستخدمين"
             value={analytics.summary.totalUsers}
@@ -352,7 +386,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Revenue Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
           <KPICard
             title="إجمالي الإيرادات"
             value={`${analytics.summary.totalRevenue.toFixed(2)} دينار`}
@@ -384,7 +418,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Charts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
           {/* Daily Registrations */}
           <AreaChartComponent
             data={analytics.dailyRegistrations}
@@ -392,7 +426,7 @@ export default function AnalyticsPage() {
             xAxisKey="formattedDate"
             title="التسجيلات اليومية"
             color={colors.gradients.purple}
-            height={350}
+            height={isMobile ? 250 : 350}
           />
           
           {/* Status Distribution */}
@@ -402,11 +436,11 @@ export default function AnalyticsPage() {
             colors={colors.charts}
             nameKey="name"
             valueKey="value"
-            height={350}
+            height={isMobile ? 250 : 350}
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
           {/* Top Cities */}
           <BarChartComponent
             data={analytics.cityStats.slice(0, 8)}
@@ -414,7 +448,7 @@ export default function AnalyticsPage() {
             xAxisKey="city"
             title="أكثر المدن تسجيلاً"
             color={colors.gradients.blue}
-            height={350}
+            height={isMobile ? 250 : 350}
           />
           
           {/* Job Types */}
@@ -424,12 +458,12 @@ export default function AnalyticsPage() {
             colors={colors.charts}
             nameKey="type"
             valueKey="count"
-            height={350}
+            height={isMobile ? 250 : 350}
           />
         </div>
 
         {/* Skills and Plans */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
           {/* Top Skills */}
           <BarChartComponent
             data={analytics.topSkills.slice(0, 10)}
@@ -437,7 +471,7 @@ export default function AnalyticsPage() {
             xAxisKey="skill"
             title="أكثر المهارات طلباً"
             color={colors.gradients.green}
-            height={350}
+            height={isMobile ? 250 : 350}
           />
           
           {/* Plan Statistics */}
@@ -447,33 +481,34 @@ export default function AnalyticsPage() {
             xAxisKey="plan"
             title="إحصائيات الخطط المدفوعة"
             color={colors.gradients.orange}
-            height={350}
+            height={isMobile ? 250 : 350}
           />
         </div>
 
         {/* Summary Stats */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">ملخص البيانات</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-            <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <p className="text-purple-600 font-medium">فترة التحليل</p>
-              <p className="text-gray-800">{analytics.period.days} يوم</p>
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4">ملخص البيانات</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm">
+            <div className="text-center p-3 sm:p-4 bg-purple-50 rounded-lg">
+              <p className="text-purple-600 font-medium text-xs sm:text-sm">فترة التحليل</p>
+              <p className="text-gray-800 text-sm sm:text-base">{analytics.period.days} يوم</p>
             </div>
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <p className="text-blue-600 font-medium">أكثر المدن</p>
-              <p className="text-gray-800">{analytics.cityStats[0]?.city || 'غير متوفر'}</p>
+            <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-lg">
+              <p className="text-blue-600 font-medium text-xs sm:text-sm">أكثر المدن</p>
+              <p className="text-gray-800 text-sm sm:text-base">{analytics.cityStats[0]?.city || 'غير متوفر'}</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg">
-              <p className="text-green-600 font-medium">أكثر المهارات</p>
-              <p className="text-gray-800">{analytics.topSkills[0]?.skill || 'غير متوفر'}</p>
+            <div className="text-center p-3 sm:p-4 bg-green-50 rounded-lg">
+              <p className="text-green-600 font-medium text-xs sm:text-sm">أكثر المهارات</p>
+              <p className="text-gray-800 text-sm sm:text-base">{analytics.topSkills[0]?.skill || 'غير متوفر'}</p>
             </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg">
-              <p className="text-orange-600 font-medium">آخر تحديث</p>
-              <p className="text-gray-800">{new Date().toLocaleDateString('ar-JO')}</p>
+            <div className="text-center p-3 sm:p-4 bg-orange-50 rounded-lg">
+              <p className="text-orange-600 font-medium text-xs sm:text-sm">آخر تحديث</p>
+              <p className="text-gray-800 text-sm sm:text-base">{new Date().toLocaleDateString('ar-JO')}</p>
             </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
   )
 }
