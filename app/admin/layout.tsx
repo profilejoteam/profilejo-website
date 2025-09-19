@@ -21,9 +21,34 @@ export default function AdminLayout({
 
   const checkAdminAccess = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      setLoading(true)
+      
+      // أولاً: محاولة الحصول على الـ session المحفوظة
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        router.push('/auth')
+        return
+      }
       
       if (!session) {
+        // إذا لم توجد session، محاولة آخر للتحقق من الـ user
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError || !user) {
+          console.log('No valid session found, redirecting to auth')
+          router.push('/auth')
+          return
+        }
+        
+        // إذا وُجد user بدون session، إنشاء session جديدة
+        console.log('User found without session, checking admin access')
+      }
+      
+      const currentUser = session?.user || null
+      
+      if (!currentUser) {
         router.push('/auth')
         return
       }
@@ -36,7 +61,7 @@ export default function AdminLayout({
         // Check if this is the specific admin email as a fallback
         const adminEmails = ['amrabdullah19876@gmail.com']
         
-        if (adminEmails.includes(session.user.email || '')) {
+        if (adminEmails.includes(currentUser.email || '')) {
           console.log('Granting admin access to predefined admin email')
           setIsAdmin(true)
           return
@@ -45,7 +70,7 @@ export default function AdminLayout({
         const { data, error: adminError } = await supabase
           .from('admins')
           .select('id, email, is_active')
-          .eq('email', session.user.email)
+          .eq('email', currentUser.email)
           .eq('is_active', true)
           .single()
         
@@ -58,7 +83,7 @@ export default function AdminLayout({
           console.error('Check MANUAL_ADMIN_FIX.sql file for the fix.')
           
           // Temporary fallback for predefined admin emails
-          if (adminEmails.includes(session.user.email || '')) {
+          if (adminEmails.includes(currentUser.email || '')) {
             console.log('Using fallback admin access due to database issue')
             setIsAdmin(true)
             return
@@ -75,7 +100,7 @@ export default function AdminLayout({
           const { data: profileCheck, error: profileError } = await supabase
             .from('profiles')
             .select('id, email, is_admin')
-            .eq('email', session.user.email)
+            .eq('email', currentUser.email)
             .eq('is_admin', true)
             .single()
           
@@ -92,7 +117,7 @@ export default function AdminLayout({
       }
 
       if (error || !adminCheck) {
-        console.error('Not an admin user:', session.user.email)
+        console.error('Not an admin user:', currentUser.email)
         console.error('Error details:', error)
         
         // Show more helpful error message for recursion issue

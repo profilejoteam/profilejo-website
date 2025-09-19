@@ -37,16 +37,39 @@ export default function Navbar() {
   }, [])
 
   useEffect(() => {
-    // Get current user
+    // Get current user and session
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      try {
+        // أولاً: محاولة الحصول على الـ session المحفوظة
+        const { data: { session } } = await supabase.auth.getSession()
+        setUser(session?.user || null)
+        
+        // إذا لم توجد session، تحقق من الـ user مباشرة
+        if (!session?.user) {
+          const { data: { user } } = await supabase.auth.getUser()
+          setUser(user)
+        }
+      } catch (error) {
+        console.error('Error getting user:', error)
+        setUser(null)
+      }
     }
+    
     getUser()
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user || null)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email)
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setUser(session?.user || null)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+      } else {
+        // للأحداث الأخرى، تحقق من الـ user مرة أخرى
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
+      }
     })
 
     return () => subscription.unsubscribe()
