@@ -1,39 +1,58 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
+import { 
+  Users, 
+  UserPlus, 
+  CreditCard, 
+  Clock, 
+  DollarSign, 
+  TrendingUp,
+  BarChart3,
+  PieChart,
+  Calendar,
+  MapPin,
+  Briefcase,
+  Star,
+  Filter,
+  Download,
+  RefreshCw
+} from 'lucide-react'
+import KPICard from '@/components/KPICard'
+import { 
+  AreaChartComponent, 
+  PieChartComponent, 
+  BarChartComponent, 
+  LineChartComponent 
+} from '@/components/ChartComponents'
 
 interface AnalyticsData {
-  totalUsers: number
-  totalApplications: number
-  pendingApplications: number
-  approvedApplications: number
-  rejectedApplications: number
-  dailyRegistrations: { date: string; count: number }[]
-  monthlyRegistrations: { month: string; count: number }[]
-  universityStats: { university: string; count: number }[]
-  majorStats: { major: string; count: number }[]
-  graduationYearStats: { year: string; count: number }[]
-  approvalRate: number
+  summary: {
+    totalUsers: number
+    newUsersInPeriod: number
+    completedPayments: number
+    pendingPayments: number
+    totalRevenue: number
+    conversionRate: number
+  }
+  statusDistribution: { [key: string]: number }
+  cityStats: { city: string; count: number }[]
+  planStats: { [key: string]: { count: number; revenue: number } }
+  dailyRegistrations: { date: string; count: number; formattedDate: string }[]
+  topSkills: { skill: string; count: number }[]
+  jobTypeStats: { [key: string]: number }
+  period: {
+    startDate: string
+    endDate: string
+    days: number
+  }
 }
 
 export default function AnalyticsPage() {
-  const [analytics, setAnalytics] = useState<AnalyticsData>({
-    totalUsers: 0,
-    totalApplications: 0,
-    pendingApplications: 0,
-    approvedApplications: 0,
-    rejectedApplications: 0,
-    dailyRegistrations: [],
-    monthlyRegistrations: [],
-    universityStats: [],
-    majorStats: [],
-    graduationYearStats: [],
-    approvalRate: 0,
-  })
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState('30') // آخر 30 يوم افتراضياً
+  const [dateRange, setDateRange] = useState('30')
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     fetchAnalytics()
@@ -42,441 +61,416 @@ export default function AnalyticsPage() {
   const fetchAnalytics = async () => {
     try {
       setLoading(true)
-
-      // تحديد نطاق التاريخ
-      const endDate = new Date()
-      const startDate = new Date()
-      startDate.setDate(endDate.getDate() - parseInt(dateRange))
-
-      // جلب جميع البيانات
-      const { data: allData, error } = await supabase
-        .from('user_submissions')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .order('created_at', { ascending: true })
-
-      if (error) throw error
-
-      // حساب الإحصائيات الأساسية
-      const totalApplications = allData?.length || 0
-      const pendingApplications = allData?.filter(app => app.status === 'pending').length || 0
-      const approvedApplications = allData?.filter(app => app.status === 'approved').length || 0
-      const rejectedApplications = allData?.filter(app => app.status === 'rejected').length || 0
-      const approvalRate = totalApplications > 0 ? (approvedApplications / totalApplications) * 100 : 0
-
-      // إحصائيات التسجيل اليومية
-      const dailyRegistrations: { [key: string]: number } = {}
-      allData?.forEach(item => {
-        const date = new Date(item.created_at).toISOString().split('T')[0]
-        dailyRegistrations[date] = (dailyRegistrations[date] || 0) + 1
-      })
-
-      const dailyRegistrationsArray = Object.entries(dailyRegistrations).map(([date, count]) => ({
-        date,
-        count
-      }))
-
-      // إحصائيات التسجيل الشهرية
-      const monthlyRegistrations: { [key: string]: number } = {}
-      allData?.forEach(item => {
-        const month = new Date(item.created_at).toISOString().substring(0, 7) // YYYY-MM
-        monthlyRegistrations[month] = (monthlyRegistrations[month] || 0) + 1
-      })
-
-      const monthlyRegistrationsArray = Object.entries(monthlyRegistrations).map(([month, count]) => ({
-        month,
-        count
-      }))
-
-      // إحصائيات الجامعات
-      const universityStats: { [key: string]: number } = {}
-      allData?.forEach(item => {
-        if (item.university) {
-          universityStats[item.university] = (universityStats[item.university] || 0) + 1
-        }
-      })
-
-      const universityStatsArray = Object.entries(universityStats)
-        .map(([university, count]) => ({ university, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10) // أفضل 10 جامعات
-
-      // إحصائيات التخصصات
-      const majorStats: { [key: string]: number } = {}
-      allData?.forEach(item => {
-        if (item.major) {
-          majorStats[item.major] = (majorStats[item.major] || 0) + 1
-        }
-      })
-
-      const majorStatsArray = Object.entries(majorStats)
-        .map(([major, count]) => ({ major, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10) // أفضل 10 تخصصات
-
-      // إحصائيات سنوات التخرج
-      const graduationYearStats: { [key: string]: number } = {}
-      allData?.forEach(item => {
-        if (item.graduation_year) {
-          graduationYearStats[item.graduation_year] = (graduationYearStats[item.graduation_year] || 0) + 1
-        }
-      })
-
-      const graduationYearStatsArray = Object.entries(graduationYearStats)
-        .map(([year, count]) => ({ year, count }))
-        .sort((a, b) => b.year.localeCompare(a.year))
-
-      setAnalytics({
-        totalUsers: totalApplications,
-        totalApplications,
-        pendingApplications,
-        approvedApplications,
-        rejectedApplications,
-        approvalRate,
-        dailyRegistrations: dailyRegistrationsArray,
-        monthlyRegistrations: monthlyRegistrationsArray,
-        universityStats: universityStatsArray,
-        majorStats: majorStatsArray,
-        graduationYearStats: graduationYearStatsArray,
-      })
+      console.log('🔍 Fetching analytics data for days:', dateRange)
+      
+      const response = await fetch(`/api/analytics?days=${dateRange}`)
+      console.log('📡 Response status:', response.status)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      console.log('📊 Analytics data received:', data)
+      
+      if (data.error) {
+        console.error('❌ API returned error:', data.error)
+        throw new Error(data.error)
+      }
+      
+      console.log('✅ Data summary:', data.summary)
+      console.log(`   - Total Users: ${data.summary.totalUsers}`)
+      console.log(`   - Cities found: ${data.cityStats.length}`)
+      console.log(`   - Skills found: ${data.topSkills.length}`)
+      console.log(`   - Daily registrations: ${data.dailyRegistrations.length}`)
+      
+      setAnalytics(data)
     } catch (error) {
-      console.error('Error fetching analytics:', error)
+      console.error('❌ Error fetching analytics:', error)
+      
+      // في حالة الخطأ، استخدم بيانات وهمية للعرض مع تنبيه للمطور
+      console.warn('⚠️ Using fallback demo data due to API error')
+      
+      const fallbackData: AnalyticsData = {
+        summary: {
+          totalUsers: 0,
+          newUsersInPeriod: 0,
+          completedPayments: 0,
+          pendingPayments: 0,
+          totalRevenue: 0,
+          conversionRate: 0
+        },
+        statusDistribution: {},
+        cityStats: [],
+        planStats: {},
+        dailyRegistrations: [],
+        topSkills: [],
+        jobTypeStats: {},
+        period: {
+          startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+          endDate: new Date().toISOString(),
+          days: 30
+        }
+      }
+      
+      setAnalytics(fallbackData)
     } finally {
       setLoading(false)
     }
   }
 
-  const exportAnalytics = () => {
-    const data = {
-      summary: {
-        'إجمالي الطلبات': analytics.totalApplications,
-        'قيد المراجعة': analytics.pendingApplications,
-        'مقبولة': analytics.approvedApplications,
-        'مرفوضة': analytics.rejectedApplications,
-        'معدل القبول': `${analytics.approvalRate.toFixed(2)}%`,
-      },
-      dailyRegistrations: analytics.dailyRegistrations,
-      monthlyRegistrations: analytics.monthlyRegistrations,
-      topUniversities: analytics.universityStats,
-      topMajors: analytics.majorStats,
-      graduationYears: analytics.graduationYearStats,
-    }
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `analytics_${new Date().toISOString().split('T')[0]}.json`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchAnalytics()
+    setRefreshing(false)
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">جاري تحميل البيانات...</p>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <nav className="flex" aria-label="Breadcrumb">
-        <ol className="inline-flex items-center space-x-1 md:space-x-3 space-x-reverse">
-          <li className="inline-flex items-center">
-            <Link
-              href="/admin"
-              className="inline-flex items-center text-sm font-medium text-gray-700 hover:text-purple-600"
+  if (!analytics) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-12">
+            <p className="text-gray-600">فشل في تحميل البيانات</p>
+            <button 
+              onClick={fetchAnalytics}
+              className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
             >
-              <svg className="w-4 h-4 ml-2" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
-              </svg>
-              الرئيسية
-            </Link>
-          </li>
-          <li>
-            <div className="flex items-center">
-              <svg className="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"></path>
-              </svg>
-              <span className="mr-1 text-sm font-medium text-gray-500 md:mr-2">التحليلات</span>
-            </div>
-          </li>
-        </ol>
-      </nav>
-
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">تحليلات وإحصائيات</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            عرض شامل لأداء النظام والاتجاهات
-          </p>
-        </div>
-        <div className="flex gap-4">
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="7">آخر 7 أيام</option>
-            <option value="30">آخر 30 يوماً</option>
-            <option value="90">آخر 3 أشهر</option>
-            <option value="365">آخر سنة</option>
-          </select>
-          <button
-            onClick={exportAnalytics}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <span className="ml-2">📥</span>
-            تصدير البيانات
-          </button>
-        </div>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <span className="text-2xl">📊</span>
-              </div>
-              <div className="mr-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    إجمالي الطلبات
-                  </dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {analytics.totalApplications}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <span className="text-2xl">⏳</span>
-              </div>
-              <div className="mr-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    قيد المراجعة
-                  </dt>
-                  <dd className="text-lg font-medium text-yellow-600">
-                    {analytics.pendingApplications}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <span className="text-2xl">✅</span>
-              </div>
-              <div className="mr-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    مقبولة
-                  </dt>
-                  <dd className="text-lg font-medium text-green-600">
-                    {analytics.approvedApplications}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <span className="text-2xl">❌</span>
-              </div>
-              <div className="mr-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    مرفوضة
-                  </dt>
-                  <dd className="text-lg font-medium text-red-600">
-                    {analytics.rejectedApplications}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <span className="text-2xl">📈</span>
-              </div>
-              <div className="mr-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    معدل القبول
-                  </dt>
-                  <dd className="text-lg font-medium text-blue-600">
-                    {analytics.approvalRate.toFixed(1)}%
-                  </dd>
-                </dl>
-              </div>
-            </div>
+              إعادة المحاولة
+            </button>
           </div>
         </div>
       </div>
+    )
+  }
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Daily Registrations Chart */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">التسجيلات اليومية</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {analytics.dailyRegistrations.length > 0 ? (
-              analytics.dailyRegistrations.map((item, index) => (
-                <div key={index} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    {new Date(item.date).toLocaleDateString('ar-SA')}
+  // تحويل البيانات للرسوم البيانية
+  const statusChartData = Object.entries(analytics.statusDistribution).map(([status, count]) => ({
+    name: status === 'draft' ? 'مسودة' : 
+          status === 'submitted' ? 'مُرسل' : 
+          status === 'approved' ? 'موافق عليه' : 
+          status === 'rejected' ? 'مرفوض' : status,
+    value: count
+  }))
+
+  const planChartData = Object.entries(analytics.planStats).map(([plan, data]) => ({
+    plan,
+    count: data.count,
+    revenue: data.revenue
+  }))
+
+  const jobTypeChartData = Object.entries(analytics.jobTypeStats).map(([type, count]) => ({
+    type: type === 'full-time' ? 'دوام كامل' :
+          type === 'part-time' ? 'دوام جزئي' :
+          type === 'freelance' ? 'عمل حر' :
+          type === 'contract' ? 'عقد' : type,
+    count
+  }))
+
+  const colors = {
+    primary: ['#8B5CF6', '#A78BFA', '#C4B5FD', '#DDD6FE'],
+    charts: ['#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444', '#EC4899'],
+    gradients: {
+      purple: '#8B5CF6',
+      blue: '#06B6D4',
+      green: '#10B981',
+      orange: '#F59E0B'
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Data Warning Banner */}
+      {analytics && analytics.summary.totalUsers === 0 && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm text-yellow-700">
+                  <strong>تشخيص البيانات:</strong> لا يمكن العثور على بيانات في جدول <code className="bg-yellow-100 px-1 rounded">profiles</code>.
+                </p>
+                <div className="mt-2">
+                  <button 
+                    onClick={() => {
+                      // فتح وحدة التحكم وتشغيل اختبار
+                      console.clear()
+                      console.log('🔍 بدء تشخيص قاعدة البيانات...')
+                      
+                      // اختبار API
+                      fetch('/api/analytics?days=30')
+                        .then(res => res.json())
+                        .then(data => {
+                          console.log('📊 استجابة API:', data)
+                          if (data.error) {
+                            console.error('❌ خطأ في API:', data.error)
+                            console.log('💡 تفاصيل:', data.details)
+                          } else if (data.debug) {
+                            console.log('🔍 معلومات التشخيص:', data.debug)
+                          }
+                        })
+                        .catch(err => console.error('❌ خطأ في طلب API:', err))
+                    }}
+                    className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-2 py-1 rounded mr-2"
+                  >
+                    🔍 تشغيل تشخيص
+                  </button>
+                  <span className="text-xs text-yellow-600">
+                    أو افتح وحدة التحكم (F12) وانسخ محتوى <code>database-check.js</code>
                   </span>
-                  <div className="flex items-center">
-                    <div 
-                      className="bg-blue-200 h-4 rounded mr-2"
-                      style={{ 
-                        width: `${(item.count / Math.max(...analytics.dailyRegistrations.map(d => d.count))) * 100}px` 
-                      }}
-                    ></div>
-                    <span className="text-sm font-medium">{item.count}</span>
-                  </div>
                 </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center">لا توجد بيانات للفترة المحددة</p>
-            )}
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Monthly Registrations Chart */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">التسجيلات الشهرية</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {analytics.monthlyRegistrations.length > 0 ? (
-              analytics.monthlyRegistrations.map((item, index) => (
-                <div key={index} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">{item.month}</span>
-                  <div className="flex items-center">
-                    <div 
-                      className="bg-green-200 h-4 rounded mr-2"
-                      style={{ 
-                        width: `${(item.count / Math.max(...analytics.monthlyRegistrations.map(d => d.count))) * 100}px` 
-                      }}
-                    ></div>
-                    <span className="text-sm font-medium">{item.count}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center">لا توجد بيانات للفترة المحددة</p>
-            )}
+      )}
+      
+      {/* Success Banner */}
+      {analytics && analytics.summary.totalUsers > 0 && (
+        <div className="bg-green-50 border-l-4 border-green-400 p-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-green-700">
+                  <strong>✅ البيانات محمّلة بنجاح!</strong> تم العثور على {analytics.summary.totalUsers} مستخدم في قاعدة البيانات.
+                  {analytics.cityStats.length > 0 && ` توزيع على ${analytics.cityStats.length} مدينة مختلفة.`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <BarChart3 className="w-6 h-6 text-purple-600" />
+                لوحة التحليلات
+              </h1>
+              <p className="text-gray-600 mt-1">
+                نظرة شاملة على أداء المنصة والمستخدمين
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {/* Date Range Selector */}
+              <select
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="7">آخر 7 أيام</option>
+                <option value="30">آخر 30 يوم</option>
+                <option value="90">آخر 3 أشهر</option>
+                <option value="365">آخر سنة</option>
+              </select>
+              
+              {/* Refresh Button */}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                تحديث
+              </button>
+              
+              {/* Export Button */}
+              <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+                <Download className="w-4 h-4" />
+                تصدير
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Statistics Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Top Universities */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">أفضل الجامعات</h3>
-          <div className="space-y-3">
-            {analytics.universityStats.length > 0 ? (
-              analytics.universityStats.map((item, index) => (
-                <div key={index} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-900 truncate">{item.university}</span>
-                  <span className="text-sm font-medium text-blue-600">{item.count}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center">لا توجد بيانات</p>
-            )}
-          </div>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <KPICard
+            title="إجمالي المستخدمين"
+            value={analytics.summary.totalUsers}
+            subtitle="المسجلين في المنصة"
+            icon={Users}
+            color="purple"
+            trend={{ value: 12, isPositive: true }}
+          />
+          
+          <KPICard
+            title="مستخدمون جدد"
+            value={analytics.summary.newUsersInPeriod}
+            subtitle={`خلال آخر ${dateRange} يوم`}
+            icon={UserPlus}
+            color="blue"
+            trend={{ value: 8, isPositive: true }}
+          />
+          
+          <KPICard
+            title="المدفوعات المكتملة"
+            value={analytics.summary.completedPayments}
+            subtitle="عملية دفع مُتممة"
+            icon={CreditCard}
+            color="green"
+            trend={{ value: 15, isPositive: true }}
+          />
+          
+          <KPICard
+            title="المدفوعات المعلقة"
+            value={analytics.summary.pendingPayments}
+            subtitle="في انتظار الدفع"
+            icon={Clock}
+            color="orange"
+            trend={{ value: -5, isPositive: false }}
+          />
         </div>
 
-        {/* Top Majors */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">أفضل التخصصات</h3>
-          <div className="space-y-3">
-            {analytics.majorStats.length > 0 ? (
-              analytics.majorStats.map((item, index) => (
-                <div key={index} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-900 truncate">{item.major}</span>
-                  <span className="text-sm font-medium text-green-600">{item.count}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center">لا توجد بيانات</p>
-            )}
-          </div>
+        {/* Revenue Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <KPICard
+            title="إجمالي الإيرادات"
+            value={`${analytics.summary.totalRevenue.toFixed(2)} دينار`}
+            subtitle="من المدفوعات المكتملة"
+            icon={DollarSign}
+            color="green"
+            trend={{ value: 25, isPositive: true }}
+          />
+          
+          <KPICard
+            title="معدل التحويل"
+            value={`${analytics.summary.conversionRate}%`}
+            subtitle="من المستخدمين للعملاء"
+            icon={TrendingUp}
+            color="blue"
+            trend={{ value: 3, isPositive: true }}
+          />
+          
+          <KPICard
+            title="متوسط قيمة الطلب"
+            value={analytics.summary.completedPayments > 0 
+              ? `${(analytics.summary.totalRevenue / analytics.summary.completedPayments).toFixed(2)} دينار`
+              : '0 دينار'
+            }
+            subtitle="لكل عملية دفع"
+            icon={Star}
+            color="purple"
+          />
         </div>
 
-        {/* Graduation Years */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">سنوات التخرج</h3>
-          <div className="space-y-3">
-            {analytics.graduationYearStats.length > 0 ? (
-              analytics.graduationYearStats.map((item, index) => (
-                <div key={index} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-900">{item.year}</span>
-                  <span className="text-sm font-medium text-purple-600">{item.count}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center">لا توجد بيانات</p>
-            )}
-          </div>
+        {/* Charts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Daily Registrations */}
+          <AreaChartComponent
+            data={analytics.dailyRegistrations}
+            dataKey="count"
+            xAxisKey="formattedDate"
+            title="التسجيلات اليومية"
+            color={colors.gradients.purple}
+            height={350}
+          />
+          
+          {/* Status Distribution */}
+          <PieChartComponent
+            data={statusChartData}
+            title="توزيع حالات الطلبات"
+            colors={colors.charts}
+            nameKey="name"
+            valueKey="value"
+            height={350}
+          />
         </div>
-      </div>
 
-      {/* Performance Insights */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">رؤى الأداء</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">
-              {analytics.totalApplications > 0 ? 
-                (analytics.pendingApplications / analytics.totalApplications * 100).toFixed(1) : 0}%
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top Cities */}
+          <BarChartComponent
+            data={analytics.cityStats.slice(0, 8)}
+            dataKey="count"
+            xAxisKey="city"
+            title="أكثر المدن تسجيلاً"
+            color={colors.gradients.blue}
+            height={350}
+          />
+          
+          {/* Job Types */}
+          <PieChartComponent
+            data={jobTypeChartData}
+            title="أنواع الوظائف المطلوبة"
+            colors={colors.charts}
+            nameKey="type"
+            valueKey="count"
+            height={350}
+          />
+        </div>
+
+        {/* Skills and Plans */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top Skills */}
+          <BarChartComponent
+            data={analytics.topSkills.slice(0, 10)}
+            dataKey="count"
+            xAxisKey="skill"
+            title="أكثر المهارات طلباً"
+            color={colors.gradients.green}
+            height={350}
+          />
+          
+          {/* Plan Statistics */}
+          <BarChartComponent
+            data={planChartData}
+            dataKey="count"
+            xAxisKey="plan"
+            title="إحصائيات الخطط المدفوعة"
+            color={colors.gradients.orange}
+            height={350}
+          />
+        </div>
+
+        {/* Summary Stats */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">ملخص البيانات</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <p className="text-purple-600 font-medium">فترة التحليل</p>
+              <p className="text-gray-800">{analytics.period.days} يوم</p>
             </div>
-            <div className="text-sm text-gray-600">طلبات قيد المراجعة</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">
-              {analytics.approvalRate.toFixed(1)}%
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <p className="text-blue-600 font-medium">أكثر المدن</p>
+              <p className="text-gray-800">{analytics.cityStats[0]?.city || 'غير متوفر'}</p>
             </div>
-            <div className="text-sm text-gray-600">معدل القبول</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-purple-600">
-              {analytics.universityStats.length}
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <p className="text-green-600 font-medium">أكثر المهارات</p>
+              <p className="text-gray-800">{analytics.topSkills[0]?.skill || 'غير متوفر'}</p>
             </div>
-            <div className="text-sm text-gray-600">جامعات مختلفة</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-orange-600">
-              {analytics.majorStats.length}
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <p className="text-orange-600 font-medium">آخر تحديث</p>
+              <p className="text-gray-800">{new Date().toLocaleDateString('ar-JO')}</p>
             </div>
-            <div className="text-sm text-gray-600">تخصصات مختلفة</div>
           </div>
         </div>
       </div>

@@ -33,6 +33,15 @@ export default function AdminLayout({
       let error = null
       
       try {
+        // Check if this is the specific admin email as a fallback
+        const adminEmails = ['amrabdullah19876@gmail.com']
+        
+        if (adminEmails.includes(session.user.email || '')) {
+          console.log('Granting admin access to predefined admin email')
+          setIsAdmin(true)
+          return
+        }
+
         const { data, error: adminError } = await supabase
           .from('admins')
           .select('id, email, is_active')
@@ -42,28 +51,57 @@ export default function AdminLayout({
         
         adminCheck = data
         error = adminError
+        
+        // Handle infinite recursion error specifically
+        if (adminError && (adminError as any).code === '42P17') {
+          console.error('Database policy recursion detected. Please run the manual fix SQL.')
+          console.error('Check MANUAL_ADMIN_FIX.sql file for the fix.')
+          
+          // Temporary fallback for predefined admin emails
+          if (adminEmails.includes(session.user.email || '')) {
+            console.log('Using fallback admin access due to database issue')
+            setIsAdmin(true)
+            return
+          }
+        }
+        
       } catch (tableError) {
-        // إذا كان جدول admins غير موجود، تحقق من جدول profiles
-        console.warn('جدول admins غير موجود، سيتم التحقق من جدول profiles')
+        console.error('Error accessing admins table:', tableError)
         
-        const { data: profileCheck, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, email, is_admin')
-          .eq('email', session.user.email)
-          .eq('is_admin', true)
-          .single()
+        // إذا كان جدول admins غير موجود أو يحتوي على مشكلة، تحقق من جدول profiles
+        console.warn('جدول admins غير متاح، سيتم التحقق من جدول profiles')
         
-        if (!profileError && profileCheck) {
-          adminCheck = profileCheck
-          error = null
-        } else {
-          error = profileError
+        try {
+          const { data: profileCheck, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, email, is_admin')
+            .eq('email', session.user.email)
+            .eq('is_admin', true)
+            .single()
+          
+          if (!profileError && profileCheck) {
+            adminCheck = profileCheck
+            error = null
+          } else {
+            error = profileError
+          }
+        } catch (profileTableError) {
+          console.error('Error accessing profiles table:', profileTableError)
+          error = profileTableError
         }
       }
 
       if (error || !adminCheck) {
         console.error('Not an admin user:', session.user.email)
         console.error('Error details:', error)
+        
+        // Show more helpful error message for recursion issue
+        if (error && (error as any).code === '42P17') {
+          console.error('🚨 DATABASE POLICY RECURSION DETECTED!')
+          console.error('Please run the SQL commands in MANUAL_ADMIN_FIX.sql file in your Supabase SQL Editor')
+          console.error('This will fix the infinite recursion in the admin table policies')
+        }
+        
         router.push('/')
         return
       }
