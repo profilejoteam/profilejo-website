@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ricchlvljcyuojbjqhim.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+// Fallback prevents createClient from throwing during Next.js static build when env vars are absent.
+// Real key must be set via NEXT_PUBLIC_SUPABASE_ANON_KEY in production/Netlify env vars.
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'build-time-placeholder-key'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
