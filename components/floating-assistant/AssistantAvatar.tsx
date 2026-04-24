@@ -1,16 +1,12 @@
-'use client'
+﻿'use client'
 
 import { motion } from 'framer-motion'
 
 interface AssistantAvatarProps {
   onClick: () => void
-  /** Whether the chat portal is open */
   isOpen: boolean
-  /** Whether the AI is thinking */
   isThinking?: boolean
-  /** Whether to show a pulse dot (new message/tip) */
   hasNotification?: boolean
-  topOffset: number
 }
 
 export default function AssistantAvatar({
@@ -18,18 +14,11 @@ export default function AssistantAvatar({
   isOpen,
   isThinking = false,
   hasNotification = false,
-  topOffset,
 }: AssistantAvatarProps) {
   return (
-    <motion.div
-      className="fixed z-50 cursor-pointer select-none"
-      style={{ right: 24 }}
-      animate={{ top: topOffset - 28 }}
-      transition={{ type: 'spring', stiffness: 120, damping: 18 }}
-    >
-      {/* Floating idle animation wrapper */}
+    <div className="fixed z-50 bottom-6 right-6">
       <motion.div
-        animate={isOpen ? { y: 0 } : { y: [0, -12, 0] }}
+        animate={isOpen ? { y: 0, scale: 1 } : { y: [0, -8, 0], scale: 1 }}
         transition={
           isOpen
             ? { duration: 0.2 }
@@ -40,17 +29,21 @@ export default function AssistantAvatar({
         role="button"
         tabIndex={0}
         onKeyDown={e => e.key === 'Enter' && onClick()}
-        className="relative"
+        className="relative cursor-pointer select-none"
       >
         {/* Glow ring */}
         <motion.div
-          className="absolute inset-0 rounded-full bg-blue-500 opacity-20 blur-md"
-          animate={{ scale: [1, 1.3, 1] }}
+          className="absolute inset-0 rounded-full bg-blue-500 opacity-20 blur-lg"
+          animate={{ scale: [1, 1.4, 1] }}
           transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
         />
 
         {/* Avatar circle */}
-        <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 shadow-lg flex items-center justify-center text-2xl border-2 border-white">
+        <div className={`relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center text-2xl border-2 border-white transition-all duration-300 ${
+          isOpen
+            ? 'bg-gradient-to-br from-indigo-600 to-purple-700'
+            : 'bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600'
+        }`}>
           {isThinking ? (
             <motion.span
               animate={{ rotate: 360 }}
@@ -58,23 +51,25 @@ export default function AssistantAvatar({
             >
               ⚙️
             </motion.span>
+          ) : isOpen ? (
+            <span className="text-white font-bold text-lg">✕</span>
           ) : (
             '🤖'
           )}
         </div>
 
-        {/* Notification dot */}
+        {/* Notification pulse dot */}
         {hasNotification && !isOpen && (
           <motion.span
-            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white"
-            animate={{ scale: [1, 1.4, 1] }}
+            className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 rounded-full border-2 border-white shadow"
+            animate={{ scale: [1, 1.5, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
           />
         )}
 
         {/* Thinking dots */}
         {isThinking && (
-          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex gap-1">
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex gap-1 bg-white rounded-full px-2 py-1 shadow">
             {[0, 1, 2].map(i => (
               <motion.span
                 key={i}
@@ -86,6 +81,6 @@ export default function AssistantAvatar({
           </div>
         )}
       </motion.div>
-    </motion.div>
+    </div>
   )
 }

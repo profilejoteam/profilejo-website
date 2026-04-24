@@ -239,7 +239,6 @@ export default function FormPage() {
         certifications: data.certifications || [],
         preferred_roles: data.preferredRoles || [],
         preferred_industries: data.preferredIndustries || [],
-        availability_date: data.availabilityDate || null,
         desired_job_type: data.desiredJobType || null,
         willing_to_relocate: data.willingToRelocate || false,
         expected_salary_range: data.expectedSalaryRange || null,

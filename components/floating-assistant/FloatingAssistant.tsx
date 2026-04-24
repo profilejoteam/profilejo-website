@@ -1,50 +1,59 @@
-'use client'
+﻿'use client'
 
 import { useState, useCallback, useEffect } from 'react'
 import { useFieldFocus } from '@/hooks/useFieldFocus'
-import { useAIConversation } from '@/hooks/useAIConversation'
+import { useAIConversation, type AIIntent } from '@/hooks/useAIConversation'
+import { useGuidedFlow } from '@/hooks/useGuidedFlow'
+import { findSequence } from '@/components/floating-assistant/field-questions'
 import AssistantAvatar from './AssistantAvatar'
 import FloatingBubble from './FloatingBubble'
 import ChatPortal from './ChatPortal'
 import TypewriterFill from './TypewriterFill'
+import GuidedFlowModal from './GuidedFlowModal'
 
-/* ── Per-field tips ── */
-const FIELD_TIPS: Record<string, { message: string; emoji: string; prompt: string }> = {
-  summary: {
-    message: 'أريد مساعدتك في كتابة نبذة شخصية احترافية!',
-    emoji: '✍️',
+// ─── Quick prompts for the free-chat portal ───────────────────────────────────
+
+const QUICK_PROMPTS: Array<{ label: string; prompt: string; intent: AIIntent; targetField?: string }> = [
+  {
+    label: '✍️ نبذة شخصية',
     prompt: 'اكتب لي نبذة شخصية احترافية',
+    intent: 'generate_summary',
+    targetField: 'summary',
   },
-  responsibilities: {
-    message: 'يمكنني صياغة مسؤولياتك بأسلوب مهني مؤثر.',
-    emoji: '📋',
-    prompt: 'ساعدني في كتابة المسؤوليات الوظيفية',
+  {
+    label: '📋 مسؤوليات',
+    prompt: 'اكتب لي مسؤوليات وظيفية احترافية',
+    intent: 'write_responsibilities',
+    targetField: 'responsibilities',
   },
-  achievements: {
-    message: 'دعني أساعدك في إبراز إنجازاتك بأرقام ملموسة.',
-    emoji: '🏆',
-    prompt: 'ساعدني في كتابة الإنجازات بأسلوب احترافي',
+  {
+    label: '🏆 إنجازات',
+    prompt: 'اكتب لي إنجازات مهنية بأسلوب STAR',
+    intent: 'write_achievements',
+    targetField: 'achievements',
   },
-  technicalSkills: {
-    message: 'أقترح لك قائمة مهارات تقنية تناسب تخصصك.',
-    emoji: '💻',
-    prompt: 'اقترح مهارات تقنية مناسبة لتخصصي',
+  {
+    label: '💡 مهارات',
+    prompt: 'اقترح مهارات تقنية وشخصية مناسبة لتخصصي',
+    intent: 'suggest_skills',
+    targetField: 'technicalSkills',
   },
-}
-
-const QUICK_PROMPTS = [
-  { label: '📝 نبذة شخصية', prompt: 'اكتب لي نبذة شخصية احترافية بناءً على بياناتي' },
-  { label: '💼 مسؤوليات', prompt: 'ساعدني في صياغة المسؤوليات الوظيفية' },
-  { label: '🏆 إنجازات', prompt: 'كيف أكتب إنجازاتي بأسلوب مميز؟' },
-  { label: '💡 مهارات', prompt: 'ما المهارات الأكثر طلباً في مجالي؟' },
+  {
+    label: '💬 نصيحة',
+    prompt: 'أعطني نصائح عملية لتحسين فرص توظيفي',
+    intent: 'general_advice',
+  },
 ]
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface FloatingAssistantProps {
   formData: Record<string, any>
   currentStep: number
-  /** Called when the AI wants to fill a specific field */
-  onFillField?: (fieldId: string, value: string) => void
+  onFillField?: (fieldId: string, value: string | string[]) => void
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FloatingAssistant({
   formData,
@@ -52,6 +61,7 @@ export default function FloatingAssistant({
   onFillField,
 }: FloatingAssistantProps) {
   const [chatOpen, setChatOpen] = useState(false)
+  const [guidedOpen, setGuidedOpen] = useState(false)
   const [bubbleDismissed, setBubbleDismissed] = useState<Record<string, boolean>>({})
   const [typewriterState, setTypewriterState] = useState<{
     fieldId: string
@@ -61,37 +71,64 @@ export default function FloatingAssistant({
 
   const fieldFocus = useFieldFocus()
   const { messages, isLoading, error, sendMessage } = useAIConversation(formData, currentStep)
+  const guidedFlow = useGuidedFlow()
 
-  /* Determine the tip for the active field */
-  const activeTip =
-    fieldFocus.fieldId && FIELD_TIPS[fieldFocus.fieldId]
-      ? FIELD_TIPS[fieldFocus.fieldId]
-      : null
+  /* ── Derive bubble visibility ── */
+  const activeFieldId = fieldFocus.fieldId
+  const activeSequence = activeFieldId ? findSequence(activeFieldId) : null
 
   const isBubbleVisible =
-    !!activeTip &&
+    !!activeSequence &&
     !chatOpen &&
-    !bubbleDismissed[fieldFocus.fieldId ?? '']
+    !guidedOpen &&
+    !bubbleDismissed[activeFieldId ?? '']
 
   const topOffset = fieldFocus.topOffset
 
-  /* Open chat and send contextual prompt for the current field */
-  const handleBubbleAction = useCallback(() => {
-    if (!activeTip) return
-    setChatOpen(true)
-    setBubbleDismissed(prev => ({ ...prev, [fieldFocus.fieldId ?? '']: true }))
-    sendMessage(activeTip.prompt)
-  }, [activeTip, fieldFocus.fieldId, sendMessage])
+  /* ── "نعم ✨" — launch guided flow ── */
+  const handleBubbleYes = useCallback(() => {
+    if (!activeFieldId) return
+    const started = guidedFlow.start(activeFieldId)
+    if (started) {
+      setGuidedOpen(true)
+      setBubbleDismissed(prev => ({ ...prev, [activeFieldId]: true }))
+    }
+  }, [activeFieldId, guidedFlow])
 
-  /* Fill field via typewriter effect */
-  const handleFillField = useCallback(
-    (fieldId: string, value: string) => {
-      setTypewriterState({ fieldId, value, active: true })
+  /* ── "لا شكراً" — dismiss bubble ── */
+  const handleBubbleDecline = useCallback(() => {
+    if (!activeFieldId) return
+    setBubbleDismissed(prev => ({ ...prev, [activeFieldId]: true }))
+  }, [activeFieldId])
+
+  /* ── Apply generated content to field ── */
+  const handleGuidedApply = useCallback(
+    (fieldId: string, content: string) => {
+      // String content — run through typewriter for visual effect
+      setTypewriterState({ fieldId, value: content, active: true })
     },
     []
   )
 
-  /* When typewriter updates, propagate to parent */
+  /* ── Close guided modal and reset flow ── */
+  const handleGuidedClose = useCallback(() => {
+    setGuidedOpen(false)
+    guidedFlow.reset()
+  }, [guidedFlow])
+
+  /* ── Fill field from ChatPortal (arrays direct, strings via typewriter) ── */
+  const handleFillField = useCallback(
+    (fieldId: string, value: string | string[]) => {
+      if (Array.isArray(value)) {
+        onFillField?.(fieldId, value)
+      } else {
+        setTypewriterState({ fieldId, value, active: true })
+      }
+    },
+    [onFillField]
+  )
+
+  /* ── Typewriter progress → propagate to form ── */
   const handleTypewriterUpdate = useCallback(
     (partial: string) => {
       if (!typewriterState) return
@@ -100,58 +137,76 @@ export default function FloatingAssistant({
     [typewriterState, onFillField]
   )
 
-  /* Reset bubble dismissed state on step change */
+  /* ── Quick prompts from ChatPortal ── */
+  const handleQuickPrompt = useCallback(
+    (item: { label: string; prompt: string; intent?: string; targetField?: string }) => {
+      sendMessage(item.prompt, {
+        intent: (item.intent as AIIntent) ?? 'chat',
+        targetField: item.targetField,
+      })
+    },
+    [sendMessage]
+  )
+
+  /* ── Reset dismissed state on step change ── */
   useEffect(() => {
     setBubbleDismissed({})
+    guidedFlow.reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep])
 
   return (
     <>
-      {/* Typewriter fill (invisible side-effect component) */}
+      {/* Invisible typewriter side-effect */}
       {typewriterState?.active && (
         <TypewriterFill
           targetValue={typewriterState.value}
           onUpdate={handleTypewriterUpdate}
           onComplete={() => setTypewriterState(null)}
-          speed={35}
+          speed={30}
         />
       )}
 
-      {/* Floating tip bubble */}
+      {/* Contextual bubble — shows "نعم / لا" */}
       <FloatingBubble
-        message={activeTip?.message ?? ''}
-        emoji={activeTip?.emoji}
+        message={activeSequence?.intro ?? ''}
+        emoji={activeSequence?.emoji}
         visible={isBubbleVisible}
-        topOffset={topOffset}
-        onDismiss={() =>
-          setBubbleDismissed(prev => ({
-            ...prev,
-            [fieldFocus.fieldId ?? '']: true,
-          }))
-        }
-        onAction={handleBubbleAction}
-        actionLabel="ساعدني ✨"
+        hasGuidedFlow
+        onDismiss={handleBubbleDecline}
+        onDecline={handleBubbleDecline}
+        onAction={handleBubbleYes}
       />
 
-      {/* Floating avatar */}
+      {/* Floating robot avatar — fixed bottom-right */}
       <AssistantAvatar
-        topOffset={topOffset}
         isOpen={chatOpen}
-        isThinking={isLoading}
+        isThinking={isLoading || guidedFlow.state.isLoading}
         hasNotification={isBubbleVisible}
         onClick={() => setChatOpen(prev => !prev)}
       />
 
-      {/* Full chat portal */}
+      {/* Free-conversation chat portal */}
       <ChatPortal
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
         messages={messages}
         isLoading={isLoading}
         error={error}
-        onSend={sendMessage}
+        onSend={text => sendMessage(text)}
         onFillField={handleFillField}
         quickPrompts={QUICK_PROMPTS}
+        onQuickPrompt={handleQuickPrompt}
+      />
+
+      {/* ★ Guided question-flow modal */}
+      <GuidedFlowModal
+        isOpen={guidedOpen}
+        flow={guidedFlow}
+        formData={formData}
+        currentStep={currentStep}
+        onApply={handleGuidedApply}
+        onClose={handleGuidedClose}
       />
     </>
   )

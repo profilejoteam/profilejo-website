@@ -220,37 +220,7 @@ export default function PurchaseFlow({ onSubmit }: PurchaseFlowProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Progress Bar */}
-      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-20 z-40">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between mb-4">
-            {steps.map((step, index) => (
-              <div key={step.id} className="flex items-center">
-                <motion.div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
-                    ${step.id <= currentStep 
-                      ? 'bg-primary-500 text-white' 
-                      : 'bg-gray-200 text-gray-400'
-                    }`}
-                  animate={{ scale: step.id === currentStep ? 1.1 : 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {step.id < currentStep ? <FaCheck /> : step.id}
-                </motion.div>
-                {index < steps.length - 1 && (
-                  <motion.div
-                    className={`h-1 w-16 mx-2 rounded-full
-                      ${step.id < currentStep ? 'bg-primary-500' : 'bg-gray-200'}`}
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: step.id < currentStep ? 1 : 0 }}
-                    transition={{ duration: 0.5 }}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+
 
       {/* Step Title */}
       <div className="bg-gray-50 py-6">

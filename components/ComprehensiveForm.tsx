@@ -356,16 +356,25 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
   }
 
   // Fill a specific field from AI (supports dot notation for nested: "experience.0.responsibilities")
-  const handleFillField = useCallback((fieldId: string, value: string) => {
+  const handleFillField = useCallback((fieldId: string, value: string | string[]) => {
     const parts = fieldId.split('.')
     if (parts.length === 1) {
-      setFormData(prev => ({ ...prev, [fieldId]: value }))
+      // For string arrays (e.g. technicalSkills, softSkills from AI), merge with existing
+      if (Array.isArray(value)) {
+        setFormData(prev => {
+          const existing: string[] = Array.isArray((prev as any)[fieldId]) ? (prev as any)[fieldId] : []
+          const merged = Array.from(new Set([...existing, ...value]))
+          return { ...prev, [fieldId]: merged }
+        })
+      } else {
+        setFormData(prev => ({ ...prev, [fieldId]: value }))
+      }
     } else if (parts.length === 3) {
       const [arrayKey, indexStr, subField] = parts
       const index = parseInt(indexStr, 10)
       setFormData(prev => {
         const arr = [...(prev as any)[arrayKey]]
-        arr[index] = { ...arr[index], [subField]: value }
+        arr[index] = { ...arr[index], [subField]: Array.isArray(value) ? value.join('\n') : value }
         return { ...prev, [arrayKey]: arr }
       })
     }
@@ -1187,6 +1196,7 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
               </label>
               <textarea
                 value={project.description}
+                data-field-id={`projects.${index}.description`}
                 onChange={(e) => updateProject(index, 'description', e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
                 rows={3}
@@ -1848,40 +1858,7 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
         }}
       />
 
-      {/* Progress Indicator */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          {Array.from({ length: totalSteps }, (_, i) => (
-            <div key={i} className="flex items-center">
-              <motion.div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-                  ${i + 1 <= currentStep ? 'bg-primary-500 text-white' : 'bg-gray-200 text-gray-400'}`}
-                animate={{ scale: i + 1 === currentStep ? 1.1 : 1 }}
-                transition={{ duration: 0.3 }}
-              >
-                {i + 1 < currentStep ? <FaCheck size={12} /> : i + 1}
-              </motion.div>
-              {i < totalSteps - 1 && (
-                <motion.div
-                  className={`h-1 w-4 mx-1 rounded-full
-                    ${i + 1 < currentStep ? 'bg-primary-500' : 'bg-gray-200'}`}
-                  initial={{ scaleX: 0 }}
-                  animate={{ scaleX: i + 1 < currentStep ? 1 : 0 }}
-                  transition={{ duration: 0.5 }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-        <p className="text-center text-gray-600 font-medium">
-          {currentStep <= 3
-            ? stepTitles[currentStep - 1]
-            : currentStep === 10
-            ? stepTitles[9]
-            : getDynamicSectionTitle(currentStep - 4)}
-          {' '}— {currentStep}/{totalSteps}
-        </p>
-      </div>
+
 
       {/* Step Content */}
       <motion.div

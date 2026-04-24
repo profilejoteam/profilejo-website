@@ -1,438 +1,517 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Intent =
+  | 'generate_summary'
+  | 'write_responsibilities'
+  | 'write_achievements'
+  | 'suggest_skills'
+  | 'improve_text'
+  | 'general_advice'
+  | 'guided_generate'
+  | 'chat';
+
+interface FormSnapshot {
+  isRecentGraduate?: boolean | null;
+  targetJobTitle?: string;
+  targetCompany?: string;
+  fullName?: string;
+  city?: string;
+  country?: string;
+  summary?: string;
+  experience?: Array<{
+    jobTitle?: string;
+    companyName?: string;
+    organization?: string;
+    responsibilities?: string;
+    achievements?: string;
+    startDate?: string;
+    endDate?: string;
+    isPresent?: boolean;
+  }>;
+  education?: Array<{
+    degree?: string;
+    major?: string;
+    university?: string;
+    graduationDate?: string;
+    gpa?: string;
+  }>;
+  technicalSkills?: string[];
+  softSkills?: string[];
+  languages?: string[];
+  certifications?: Array<{ certName?: string; title?: string; issuer?: string }>;
+  projects?: Array<{ projectName?: string; title?: string; description?: string }>;
+  achievements?: Array<{ details?: string }>;
+  volunteerWork?: string;
+  interests?: string;
+}
+
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const { message, context } = await request.json();
+    const body = await request.json();
+    const {
+      message,
+      intent,
+      targetField,
+      existingContent,
+      guidedAnswers,
+      history = [],
+      context,
+    } = body;
+
+    if (!message?.trim()) {
+      return NextResponse.json({ success: false, error: 'message is required' }, { status: 400 });
+    }
+
+    const formData: FormSnapshot = context?.formData ?? {};
+    const currentStep: number = context?.currentStep ?? 1;
 
     if (!process.env.OPENAI_API_KEY) {
-      const response = await generateFallbackResponse(message, context);
-      return NextResponse.json({ 
-        response,
+      return NextResponse.json({
+        response: fallbackResponse(message, intent, formData),
         success: true,
-        source: 'fallback'
+        source: 'fallback',
       });
     }
 
-    const response = await generateChatGPTResponse(message, context);
-    return NextResponse.json({ 
-      response,
-      success: true,
-      source: 'openai'
+    const detectedIntent: Intent = intent ?? detectIntent(message, targetField);
+    const systemPrompt = buildSystemPrompt(detectedIntent, formData, currentStep, existingContent, guidedAnswers, targetField);
+    const userMessage = buildUserMessage(message, detectedIntent, formData, existingContent, guidedAnswers, targetField);
+
+    // Keep last 8 turns for multi-turn context
+    const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = (
+      (history as ConversationMessage[]) ?? []
+    ).slice(-8).map(m => ({ role: m.role, content: m.content }));
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...conversationHistory,
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: 1200,
+      temperature: detectedIntent === 'chat' || detectedIntent === 'general_advice' ? 0.8 : 0.65,
+      response_format: needsStructuredOutput(detectedIntent) ? { type: 'json_object' } : undefined,
     });
+
+    const raw = completion.choices[0]?.message?.content ?? '';
+    const result = parseResponse(raw, detectedIntent, targetField);
+
+    return NextResponse.json({ response: result, success: true, source: 'openai' });
   } catch (error) {
     console.error('AI Chat Error:', error);
-    return NextResponse.json({ 
-      response: {
-        text: 'عذراً، حدث خطأ في النظام. يرجى المحاولة مرة أخرى.',
-        suggestion: null
-      },
+    return NextResponse.json({
+      response: { text: 'عذراً، حدث خطأ مؤقت. حاول مرة أخرى.' },
       success: true,
-      source: 'error_fallback'
+      source: 'error_fallback',
     });
   }
 }
 
-async function generateChatGPTResponse(message: string, context: any) {
-  const contextAnalysis = analyzeUserContext(context);
-  
-  const systemPrompt = `أنت خبير موارد بشرية وكوتش مهني عالمي مع خبرة 15+ سنة في السوق الأردني والخليجي. 
+// ─── Intent detection ─────────────────────────────────────────────────────────
+function detectIntent(message: string, targetField?: string): Intent {
+  const m = message.toLowerCase();
 
-🧠 هويتك المهنية:
-- متخصص في تطوير البروفايلات والسير الذاتية
-- خبير في توجيه المسارات المهنية حسب السوق المحلي
-- مستشار معتمد في التطوير المهني والتوظيف
-- محلل ذكي لاحتياجات أصحاب العمل الأردنيين
+  if (targetField) {
+    if (targetField === 'summary') return 'generate_summary';
+    if (targetField.includes('responsibilities')) return 'write_responsibilities';
+    if (targetField.includes('achievements') || targetField.includes('details')) return 'write_achievements';
+    if (targetField === 'technicalSkills' || targetField === 'softSkills') return 'suggest_skills';
+  }
 
-📊 معلومات الحالة الحالية:
-- التخصص المحدد: ${contextAnalysis.estimatedField}
-- مستوى الخبرة: ${contextAnalysis.experienceLevel}
-- نسبة الاكتمال: ${contextAnalysis.completedFields}%
-- التركيز الحالي: ${contextAnalysis.currentFocus}
+  if (m.match(/اكتب|أكتب|اكتبي|أكتبي|ولّد|ولد|اصنع|صياغ|generate|write/)) {
+    if (m.match(/نبذ|summary|هدف وظيفي|خلاصة/)) return 'generate_summary';
+    if (m.match(/مسؤولي|واجب|مهام|responsib/)) return 'write_responsibilities';
+    if (m.match(/إنجاز|جائزة|achievement|accomplish/)) return 'write_achievements';
+    if (m.match(/مهار|skill/)) return 'suggest_skills';
+  }
 
-🎯 مهمتك الأساسية:
-تقديم نصائح احترافية مخصصة وذكية تهدف إلى:
-• زيادة فرص القبول في الوظائف بنسبة 70%+
-• تحسين جاذبية البروفايل لأصحاب العمل
-• توجيه المستخدم لأفضل الممارسات في مجاله
-• اقتراح كلمات مفتاحية تزيد الظهور في محركات البحث
+  if (m.match(/حسّن|حسن|طور|improve|enhance|edit|عدّل|راجع/)) return 'improve_text';
+  if (m.match(/مهار|skill|تقني|برامج|أدوات/)) return 'suggest_skills';
+  if (m.match(/نصيح|نصائح|كيف أ|ماذا أ|advice|tip/)) return 'general_advice';
 
-📋 قواعد الرد الاحترافي:
-✅ استخدم تحليل عميق وذكي للبيانات المقدمة
-✅ قدم نصائح عملية قابلة للتطبيق فوراً
-✅ اربط كل نصيحة بمتطلبات السوق الأردني/الخليجي
-✅ أعط أمثلة محددة وأرقام ملموسة
-✅ اقترح عبارات احترافية جاهزة للاستخدام
-✅ حدد الأولوية (🔥 عالي | ⚡ متوسط | 💡 مقترح)
-✅ اربط النصائح بالتخصص المحدد
-
-🚫 تجنب:
-❌ النصائح العامة غير المخصصة
-❌ المعلومات التقنية المعقدة جداً
-❌ التكرار والحشو
-❌ النصائح غير القابلة للتطبيق
-
-💬 أسلوب التواصل:
-- لغة عربية احترافية مع رموز تعبيرية مناسبة
-- نبرة ودية وداعمة مع الحفاظ على الاحترافية
-- ردود منظمة وسهلة القراءة
-- تركيز على النتائج والتحسينات الفورية`;
-
-  const userContextMessage = buildContextualMessage(message, context);
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContextMessage }
-    ],
-    max_tokens: 1500,
-    temperature: 0.8,
-    presence_penalty: 0.2,
-    frequency_penalty: 0.1,
-    top_p: 0.9,
-  });
-
-  const aiText = completion.choices[0]?.message?.content || 'عذراً، أواجه مشكلة تقنية. دعني أساعدك بطريقة أخرى.';
-  
-  const smartSuggestion = await extractSmartSuggestions(aiText, context);
-
-  return {
-    text: aiText,
-    suggestion: smartSuggestion
-  };
+  return 'chat';
 }
 
-// تحليل ذكي لسياق المستخدم
-function analyzeUserContext(context: any) {
-  console.log('📊 تحليل بيانات المستخدم:', JSON.stringify(context, null, 2));
-  
-  const formData = context?.formData || {};
-  const currentStep = context?.currentStep || 1;
-  
-  // تحليل التخصص المحتمل من مصادر متعددة
-  let estimatedField = 'غير محدد';
-  
-  // البحث في التخصص الأساسي
-  const major = (formData.major || '').toLowerCase();
-  
-  // البحث في قسم التعليم (education array) - هنا المشكلة!
-  let educationMajor = '';
-  console.log('🎓 بيانات التعليم:', formData.education);
-  
-  if (formData.education && Array.isArray(formData.education) && formData.education.length > 0) {
-    educationMajor = (formData.education[0].major || formData.education[0].degree || '').toLowerCase();
-    console.log('✅ وجدت تخصص في التعليم:', educationMajor);
-  } else if (formData.education && typeof formData.education === 'object') {
-    educationMajor = (formData.education.major || formData.education.degree || '').toLowerCase();
-    console.log('✅ وجدت تخصص في التعليم (object):', educationMajor);
-  }
-  
-  // البحث في المنصب الوظيفي
-  const jobTitle = (formData.jobTitle || '').toLowerCase();
-  console.log('💼 المنصب الوظيفي:', jobTitle);
-  
-  // البحث في المسؤوليات والمهارات
-  const responsibilities = (formData.responsibilities || '').toLowerCase();
-  const skills = Array.isArray(formData.skills) ? formData.skills.join(' ').toLowerCase() : (formData.skills || '').toLowerCase();
-  
-  // تحليل متقدم من عدة مصادر
-  const allContent = `${major} ${educationMajor} ${jobTitle} ${responsibilities} ${skills}`;
-  console.log('🔍 المحتوى المدمج للتحليل:', allContent);
-  
-  if (allContent.includes('هندس') || allContent.includes('engineer')) {
-    if (allContent.includes('حاسوب') || allContent.includes('computer') || allContent.includes('برمجة') || 
-        allContent.includes('مطور') || allContent.includes('تطوير') || allContent.includes('software')) {
-      estimatedField = 'هندسة البرمجيات وتكنولوجيا المعلومات';
-    } else if (allContent.includes('مدني') || allContent.includes('civil') || allContent.includes('إنشاء') || allContent.includes('بناء')) {
-      estimatedField = 'الهندسة المدنية والإنشاءات';
-    } else if (allContent.includes('كهرباء') || allContent.includes('electrical')) {
-      estimatedField = 'الهندسة الكهربائية';
-    } else if (allContent.includes('ميكانيك') || allContent.includes('mechanical')) {
-      estimatedField = 'الهندسة الميكانيكية';
-    } else {
-      estimatedField = 'الهندسة العامة';
-    }
-  } else if (allContent.includes('طب') || allContent.includes('medical') || allContent.includes('طبيب')) {
-    estimatedField = 'المجال الطبي والصحي';
-  } else if (allContent.includes('إدارة') || allContent.includes('business') || allContent.includes('أعمال') || 
-             allContent.includes('مدير') || allContent.includes('manager') || allContent.includes('قيادة')) {
-    estimatedField = 'إدارة الأعمال والقيادة';
-  } else if (allContent.includes('تسويق') || allContent.includes('marketing') || allContent.includes('مبيعات')) {
-    estimatedField = 'التسويق والمبيعات';
-  } else if (allContent.includes('محاسبة') || allContent.includes('accounting') || allContent.includes('محاسب')) {
-    estimatedField = 'المحاسبة والمالية';
-  } else if (allContent.includes('تدريس') || allContent.includes('تعليم') || allContent.includes('معلم') || allContent.includes('أستاذ')) {
-    estimatedField = 'التعليم والتدريس';
-  } else if (allContent.includes('تصميم') || allContent.includes('design') || allContent.includes('مصمم')) {
-    estimatedField = 'التصميم والإبداع';
-  }
-  
-  // إذا لم نجد تخصص، استخدم أول شيء متاح
-  if (estimatedField === 'غير محدد') {
-    if (educationMajor) {
-      estimatedField = educationMajor;
-    } else if (major) {
-      estimatedField = major;
-    } else if (jobTitle) {
-      estimatedField = jobTitle;
-    }
-  }
-  
-  console.log('🎯 التخصص المحدد:', estimatedField);
-  
-  // تحليل مستوى الخبرة
-  let experienceLevel = 'مبتدئ';
-  const userResponsibilities = formData.responsibilities || '';
-  const achievements = formData.achievements || '';
-  
-  if (userResponsibilities.length > 200 || achievements.length > 200) {
-    experienceLevel = 'متقدم';
-  } else if (userResponsibilities.length > 100 || achievements.length > 100) {
-    experienceLevel = 'متوسط';
-  }
-  
-  // حساب نسبة الاكتمال
-  const requiredFields = ['fullName', 'email', 'phone', 'jobTitle', 'major', 'university'];
-  const completedCount = requiredFields.filter(field => formData[field] && formData[field].toString().trim()).length;
-  const completedFields = Math.round((completedCount / requiredFields.length) * 100);
-  
-  // تحديد التركيز الحالي
-  let currentFocus = 'المعلومات الأساسية';
-  if (currentStep >= 2) currentFocus = 'التعليم والمؤهلات';
-  if (currentStep >= 3) currentFocus = 'الخبرة المهنية';
-  if (currentStep >= 4) currentFocus = 'المشاريع والإنجازات';
-  if (currentStep >= 5) currentFocus = 'المهارات والقدرات';
-  
-  return {
-    estimatedField,
-    experienceLevel,
-    completedFields,
-    currentFocus,
-    formData
-  };
+function needsStructuredOutput(intent: Intent): boolean {
+  return ['generate_summary', 'write_responsibilities', 'write_achievements', 'suggest_skills', 'improve_text', 'guided_generate'].includes(intent);
 }
 
-// بناء رسالة سياقية ذكية ومتقدمة
-function buildContextualMessage(message: string, context: any) {
-  const analysis = analyzeUserContext(context);
-  
-  let contextualMessage = `📝 سؤال المستخدم: "${message}"\n\n`;
-  
-  // إضافة سياق ذكي ومفصل
-  contextualMessage += `🔍 تحليل البروفايل الحالي:\n`;
-  contextualMessage += `• التخصص المحدد: ${analysis.estimatedField}\n`;
-  contextualMessage += `• مستوى الخبرة المقدر: ${analysis.experienceLevel}\n`;
-  contextualMessage += `• نسبة اكتمال البروفايل: ${analysis.completedFields}%\n`;
-  contextualMessage += `• القسم قيد العمل: ${analysis.currentFocus}\n\n`;
-  
-  // إضافة بيانات المستخدم الموجودة
-  if (analysis.formData) {
-    contextualMessage += `📊 البيانات المتوفرة:\n`;
-    
-    if (analysis.formData.jobTitle) {
-      contextualMessage += `• المنصب المطلوب: ${analysis.formData.jobTitle}\n`;
-    }
-    
-    if (analysis.formData.education && Array.isArray(analysis.formData.education) && analysis.formData.education.length > 0) {
-      const edu = analysis.formData.education[0];
-      if (edu.major) contextualMessage += `• التخصص الدراسي: ${edu.major}\n`;
-      if (edu.university) contextualMessage += `• الجامعة: ${edu.university}\n`;
-    }
-    
-    if (analysis.formData.skills) {
-      const skillsText = Array.isArray(analysis.formData.skills) ? analysis.formData.skills.join(', ') : analysis.formData.skills;
-      contextualMessage += `• المهارات: ${skillsText}\n`;
-    }
-    
-    if (analysis.formData.experience) {
-      contextualMessage += `• سنوات الخبرة: ${analysis.formData.experience}\n`;
-    }
-    
-    if (analysis.formData.responsibilities) {
-      contextualMessage += `• المسؤوليات: ${analysis.formData.responsibilities.substring(0, 100)}...\n`;
-    }
-  }
-  
-  // تحديد نوع المساعدة المطلوبة
-  const lowerMessage = message.toLowerCase();
-  if (lowerMessage.includes('نصائح') || lowerMessage.includes('اقتراحات')) {
-    contextualMessage += `\n🎯 نوع المساعدة المطلوبة: نصائح تحسين البروفايل\n`;
-  } else if (lowerMessage.includes('كتابة') || lowerMessage.includes('صياغة')) {
-    contextualMessage += `\n✍️ نوع المساعدة المطلوبة: مساعدة في الكتابة والصياغة\n`;
-  } else if (lowerMessage.includes('مهارات')) {
-    contextualMessage += `\n💪 نوع المساعدة المطلوبة: تطوير وعرض المهارات\n`;
-  }
-  
-  contextualMessage += `\n🎯 المطلوب: تقديم نصائح احترافية مخصصة ومفصلة لتحسين البروفايل وزيادة فرص التوظيف.`;
-  
-  return contextualMessage;
+// ─── System prompt builder ────────────────────────────────────────────────────
+function buildSystemPrompt(
+  intent: Intent,
+  form: FormSnapshot,
+  step: number,
+  existingContent?: string,
+  guidedAnswers?: Record<string, string>,
+  targetField?: string,
+): string {
+  const profile = buildProfileSummary(form);
+
+  const BASE = `أنت "Rafi" — مساعد ذكاء اصطناعي متخصص في بناء السير الذاتية والبروفايلات المهنية للسوق الأردني والخليجي. تتحدث العربية بطلاقة وبأسلوب ودود واحترافي.
+
+بيانات المستخدم الحالية:
+${profile}
+
+القسم النشط: ${stepName(step)}`;
+
+  switch (intent) {
+    case 'generate_summary':
+      return `${BASE}
+
+مهمتك: كتابة نبذة شخصية احترافية (Professional Summary) للمستخدم.
+
+أعطني JSON بالشكل التالي فقط:
+{
+  "text": "شرح موجز لما ستكتبه",
+  "content": "النبذة الشخصية المكتوبة هنا (3-4 جمل، 60-90 كلمة، بدون عناوين)",
+  "tips": ["نصيحة 1", "نصيحة 2"]
 }
 
-// استخراج اقتراحات ذكية ومتقدمة من رد ChatGPT
-async function extractSmartSuggestions(aiResponse: string, context: any) {
-  const analysis = analyzeUserContext(context);
-  
-  // تحليل ذكي متقدم للرد واستخراج اقتراحات عملية
-  const suggestions: any = {
-    fields: {},
-    confidence: 0.85,
-    source: 'GPT-4o Enhanced Analysis',
-    tips: [],
-    keywords: [],
-    marketInsights: []
-  };
-  
-  // اقتراحات مخصصة حسب التخصص مع تحليل السوق الأردني
-  if (analysis.estimatedField.includes('تكنولوجيا') || analysis.estimatedField.includes('حاسوب') || analysis.estimatedField.includes('برمجة')) {
-    suggestions.fields = {
-      skills: ['JavaScript', 'React', 'Node.js', 'Python', 'SQL', 'AWS', 'Docker', 'Git'],
-      responsibilities: 'تطوير تطبيقات ويب متقدمة، كتابة كود نظيف وقابل للصيانة، حل المشكلات التقنية المعقدة، التعاون مع فرق متعددة التخصصات، تحسين أداء التطبيقات'
+قواعد النبذة:
+- ابدأ بالمسمى الوظيفي أو الكفاءة المميزة
+- اذكر سنوات الخبرة (أو "حديث التخرج" إن كان مبتدئاً)
+- أبرز أهم قيمة يقدمها للشركة
+- أسلوب واثق بدون ضمير المتكلم المباشر ("أنا")
+- ملائم للسوق الأردني والخليجي`;
+
+    case 'write_responsibilities':
+      return `${BASE}
+
+مهمتك: كتابة قائمة مسؤوليات وظيفية احترافية.
+
+أعطني JSON بالشكل التالي فقط:
+{
+  "text": "شرح موجز",
+  "content": "• مسؤولية 1\\n• مسؤولية 2\\n• مسؤولية 3\\n• مسؤولية 4\\n• مسؤولية 5",
+  "tips": ["نصيحة 1"]
+}
+
+القواعد:
+- 4-6 نقاط، كل نقطة تبدأ بـ •
+- ابدأ كل نقطة بفعل نشط (أدار، طوّر، نفّذ، قاد، حلّل، صمّم...)
+- اجعلها قابلة للقياس حيثما أمكن
+- خصص للمسمى الوظيفي المذكور`;
+
+    case 'write_achievements':
+      return `${BASE}
+
+مهمتك: كتابة إنجازات مهنية بأسلوب STAR.
+
+أعطني JSON بالشكل التالي فقط:
+{
+  "text": "شرح موجز",
+  "content": "• إنجاز 1 (بأرقام)\\n• إنجاز 2 (بأرقام)\\n• إنجاز 3",
+  "tips": ["نصيحة 1"]
+}
+
+القواعد:
+- 3-5 إنجازات تبدأ بـ •
+- استخدم أرقاماً ونسباً مئوية دائماً (زيادة 25%، خفّض بـ 3 أيام...)
+- نمط: فعل ماضٍ ← إجراء ← نتيجة قابلة للقياس
+- ابدأ بأقوى إنجاز`;
+
+    case 'suggest_skills':
+      return `${BASE}
+
+مهمتك: اقتراح مهارات مناسبة للمستخدم.
+
+أعطني JSON بالشكل التالي فقط:
+{
+  "text": "شرح موجز",
+  "technicalSkills": ["مهارة 1", "مهارة 2", "مهارة 3", "مهارة 4", "مهارة 5", "مهارة 6"],
+  "softSkills": ["مهارة شخصية 1", "مهارة شخصية 2", "مهارة شخصية 3", "مهارة شخصية 4"],
+  "tips": ["نصيحة 1"]
+}
+
+القواعد:
+- 6-8 مهارات تقنية و4-5 شخصية
+- خصص حسب المسمى الوظيفي والتخصص الدراسي
+- أعط الأولوية للمهارات الأكثر طلباً في الأردن والخليج
+- لا تكرر ما هو موجود بالفعل`;
+
+    case 'improve_text':
+      return `${BASE}
+
+مهمتك: تحسين النص الموجود وإعادة صياغته بأسلوب أكثر احترافية.
+
+النص الحالي للتحسين:
+"""
+${existingContent ?? 'غير محدد'}
+"""
+
+أعطني JSON بالشكل التالي فقط:
+{
+  "text": "شرح التحسينات التي أجريتها",
+  "content": "النص المحسّن هنا",
+  "improvements": ["التحسين 1", "التحسين 2", "التحسين 3"]
+}
+
+القواعد:
+- احتفظ بالمعنى الأصلي لكن حسّن الأسلوب والصياغة
+- أضف أرقاماً وتفاصيل حيثما أمكن
+- اجعله أكثر تأثيراً وجاذبية لأصحاب العمل`;
+
+    case 'general_advice':
+      return `${BASE}
+
+مهمتك: تقديم نصائح مهنية مخصصة وعملية.
+
+القواعد:
+- نصائح مخصصة للمستخدم تحديداً (استخدم اسمه وبياناته)
+- اربط كل نصيحة بسوق العمل الأردني/الخليجي
+- أعط أمثلة ملموسة وأرقاماً
+- لا تتجاوز 200 كلمة
+- استخدم تنسيق واضح (نقاط أو أقسام قصيرة)`;
+
+    case 'guided_generate': {
+      const answersText = Object.entries(guidedAnswers ?? {})
+        .filter(([, v]) => v?.trim())
+        .map(([k, v]) => `- ${k}: ${v}`)
+        .join('\n');
+
+      const fieldHint = resolveGuidedFieldHint(targetField ?? '');
+
+      return `${BASE}
+
+مهمتك: توليد محتوى احترافي عالي الجودة لحقل "${targetField}" بناءً على إجابات المستخدم.
+
+إجابات المستخدم:
+${answersText || '(لا توجد إجابات)'}
+
+${fieldHint}
+
+أعطني JSON بالشكل التالي فقط:
+{
+  "text": "شرح موجز لما ولّدته",
+  "content": "المحتوى الاحترافي هنا",
+  "tips": ["نصيحة 1", "نصيحة 2"]
+}
+
+القواعد:
+- اعتمد على إجابات المستخدم أساساً
+- اجعل المحتوى مخصصاً تماماً وليس عاماً
+- أسلوب احترافي مناسب للسوق الأردني والخليجي
+- لا تخترع معلومات غير موجودة في الإجابات`;
+    }
+
+    default: // chat
+      return `${BASE}
+
+أنت في محادثة تفاعلية مع المستخدم. أجب بطبيعية وبإيجاز (100-150 كلمة). اقترح خطوات عملية تالية متى أمكن.`;
+  }
+}
+
+// ─── User message builder ─────────────────────────────────────────────────────
+function buildUserMessage(
+  message: string,
+  intent: Intent,
+  form: FormSnapshot,
+  existingContent?: string,
+  guidedAnswers?: Record<string, string>,
+  targetField?: string,
+): string {
+  const job = form.targetJobTitle || form.experience?.[0]?.jobTitle || 'غير محدد';
+  const company = form.targetCompany || form.experience?.[0]?.companyName || form.experience?.[0]?.organization || '';
+  const edu = form.education?.[0];
+
+  switch (intent) {
+    case 'generate_summary':
+      return `اكتب نبذة شخصية لي. معلوماتي:
+- المسمى المستهدف: ${job}${company ? `\n- الشركة المستهدفة: ${company}` : ''}
+- التعليم: ${edu?.degree ?? ''} ${edu?.major ?? ''} — ${edu?.university ?? ''}
+- الخبرة: ${form.isRecentGraduate ? 'حديث التخرج' : `${form.experience?.length ?? 0} خبرات عملية`}
+- المهارات: ${[...(form.technicalSkills ?? []), ...(form.softSkills ?? [])].slice(0, 5).join(', ') || 'لم تُحدَّد بعد'}
+طلبي: ${message}`;
+
+    case 'write_responsibilities':
+      return `اكتب مسؤوليات وظيفية لمنصب "${job}"${company ? ` في "${company}"` : ''}.
+طلبي: ${message}`;
+
+    case 'write_achievements':
+      return `اكتب إنجازات مهنية لمنصب "${job}"${company ? ` في "${company}"` : ''}.
+طلبي: ${message}`;
+
+    case 'suggest_skills':
+      return `اقترح مهارات لـ "${job}". تخصصي: ${edu?.major ?? 'غير محدد'}. مهاراتي الحالية: ${[...(form.technicalSkills ?? [])].join(', ') || 'لا يوجد'}.
+طلبي: ${message}`;
+
+    case 'improve_text':
+      return `حسّن هذا النص: "${existingContent}". طلبي: ${message}`;
+
+    case 'guided_generate': {
+      const lines = Object.entries(guidedAnswers ?? {})
+        .filter(([, v]) => v?.trim())
+        .map(([k, v]) => `- ${k}: ${v}`)
+        .join('\n');
+      return `ولّد محتوى احترافياً للحقل "${targetField}" بناءً على الإجابات التالية:\n${lines}\n\nطلب إضافي: ${message}`;
+    }
+
+    default:
+      return message;
+  }
+}
+
+// ─── Response parser ──────────────────────────────────────────────────────────
+function parseResponse(raw: string, intent: Intent, targetField?: string): Record<string, unknown> {
+  if (!needsStructuredOutput(intent)) {
+    return { text: raw };
+  }
+
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(raw);
+
+    const result: Record<string, unknown> = {
+      text: parsed.text ?? 'تم إنشاء المحتوى بنجاح ✅',
+      tips: parsed.tips ?? [],
+      improvements: parsed.improvements ?? [],
     };
-    suggestions.keywords = ['تطوير البرمجيات', 'هندسة البرمجيات', 'تطبيقات الويب', 'قواعد البيانات', 'البرمجة كائنية التوجه'];
-    suggestions.tips = [
-      '🔥 أضف portfolio على GitHub مع 5+ مشاريع متنوعة',
-      '⚡ اذكر التقنيات الحديثة (React 18, Next.js, TypeScript)',
-      '💡 أكد على خبرتك في Agile/Scrum والعمل الجماعي',
-      '🎯 اذكر المشكلات التقنية المعقدة التي حللتها'
-    ];
-    suggestions.marketInsights = [
-      'الطلب عالي على مطوري Full-Stack في الأردن',
-      'شركات مثل Atypon وJETS تبحث عن مهارات React',
-      'AWS وCloud Computing مطلوبة بكثرة'
-    ];
-  } else if (analysis.estimatedField.includes('هندسة') && analysis.estimatedField.includes('مدني')) {
-    suggestions.fields = {
-      skills: ['AutoCAD', 'SAP2000', 'ETABS', 'إدارة المشاريع', 'تصميم إنشائي', 'مراقبة الجودة'],
-      responsibilities: 'تصميم المباني السكنية والتجارية، إشراف على تنفيذ المشاريع الإنشائية، ضمان مطابقة المعايير الهندسية، إدارة فرق العمل الهندسية'
-    };
-    suggestions.keywords = ['التصميم الإنشائي', 'إدارة المشاريع', 'هندسة الطرق', 'البناء المستدام'];
-    suggestions.tips = [
-      '🏗️ اذكر قيمة وحجم المشاريع التي عملت عليها',
-      '📋 أضف شهادات PMP أو إدارة المشاريع',
-      '🔧 أكد على خبرتك في البرامج الهندسية المتقدمة'
-    ];
-    suggestions.marketInsights = [
-      'نمو قطاع البناء في الأردن يتطلب مهندسين مهرة',
-      'مشاريع العقبة الاقتصادية تحتاج خبرات متقدمة'
-    ];
-  } else if (analysis.estimatedField.includes('إدارة') || analysis.estimatedField.includes('أعمال')) {
-    suggestions.fields = {
-      skills: ['القيادة الاستراتيجية', 'إدارة الفرق', 'تحليل البيانات', 'التخطيط المالي', 'التسويق الرقمي'],
-      responsibilities: 'وضع الاستراتيجيات طويلة المدى، قيادة فرق متعددة الوظائف، تحليل مؤشرات الأداء، تحسين العمليات التشغيلية، تطوير خطط التسويق'
-    };
-    suggestions.keywords = ['القيادة الاستراتيجية', 'إدارة التغيير', 'تطوير الأعمال', 'التحليل المالي'];
-    suggestions.tips = [
-      '📈 اذكر نسب النمو المحققة (مثال: زيادة الإيرادات 25%)',
-      '👥 أضف حجم الفرق والميزانيات التي أدرتها',
-      '🎯 أكد على مشاريع التحول الرقمي التي قدتها'
-    ];
-  }
-  
-  // اقتراحات ذكية بناء على مستوى الخبرة
-  if (analysis.experienceLevel === 'مبتدئ') {
-    suggestions.tips.push('💡 ركز على مشاريع التخرج والتدريبات العملية بتفصيل');
-    suggestions.tips.push('📚 أضف certifications حديثة ذات صلة بمجالك');
-    suggestions.tips.push('🚀 اكتب عن شغفك للتعلم والنمو المهني');
-  } else if (analysis.experienceLevel === 'متوسط') {
-    suggestions.tips.push('📊 أكد على الإنجازات المحققة بأرقام ملموسة');
-    suggestions.tips.push('🎯 اربط خبراتك بأهداف الشركات في السوق الأردني');
-    suggestions.tips.push('⚡ اذكر المشاريع الناجحة وتأثيرها على النتائج');
-  } else if (analysis.experienceLevel === 'متقدم') {
-    suggestions.tips.push('🏆 أكد على القيادة والإنجازات الاستراتيجية');
-    suggestions.tips.push('👨‍💼 اذكر فرق العمل التي قدتها والمشاريع الكبرى');
-    suggestions.tips.push('🎓 أضف خبرتك في الإرشاد وتطوير المواهب');
-    suggestions.tips.push('🌟 اذكر التكريمات والجوائز المهنية');
-  }
 
-  // تحسين مستوى الثقة بناءً على جودة البيانات المتوفرة
-  if (analysis.completedFields > 80) {
-    suggestions.confidence = 0.95;
-  } else if (analysis.completedFields > 60) {
-    suggestions.confidence = 0.88;
-  } else if (analysis.completedFields > 40) {
-    suggestions.confidence = 0.75;
-  }
-
-  return suggestions;
-}
-
-async function generateFallbackResponse(message: string, context: any) {
-  const analysis = analyzeUserContext(context);
-  const lowerMessage = message.toLowerCase();
-
-  // Debug لرؤية ما يحدث
-  console.log('Debug - Analysis result:', analysis);
-
-  // ردود ذكية بناء على التحليل
-  let responseText = '';
-  let suggestions: any = null;
-
-  // تحليل نوع السؤال
-  if (lowerMessage.includes('نصائح') || lowerMessage.includes('نصيحة') || lowerMessage.includes('اقتراحات')) {
-    if (analysis.estimatedField === 'غير محدد') {
-      responseText = `💡 **نصائح سريعة لبناء بروفايل قوي:**\n\n🎯 **الخطوة الأولى - حدد تخصصك:**\n• ما مجال دراستك؟ (هندسة، طب، إدارة أعمال...)\n• ما المنصب الذي تريده؟ (مطور، مهندس، محاسب...)\n• ما مهاراتك الأساسية؟\n\n📝 **املأ المعلومات الأساسية:**\n• الاسم الكامل والمعلومات الشخصية\n• التعليم والدرجة العلمية\n• الخبرات العملية (ولو بسيطة)\n\n🚀 **اجعل بروفايلك مميز:**\n• اكتب إنجازاتك بأرقام ملموسة\n• أضف مشاريعك الشخصية أو التطوعية\n• اذكر الدورات والشهادات\n\n💬 **اكتب لي تخصصك وسأعطيك نصائح مخصصة!**`;
-    } else {
-      responseText = `💡 **نصائح مخصصة لمجال ${analysis.estimatedField}:**\n\n`;
-      
-      if (analysis.estimatedField.includes('تكنولوجيا') || analysis.estimatedField.includes('برمجة') || analysis.estimatedField.includes('حاسوب')) {
-        responseText += `� **للتكنولوجيا والبرمجة:**\n• 🔧 أضف لغات البرمجة التي تجيدها (JavaScript, Python, Java...)\n• 📱 اذكر المشاريع البرمجية والتطبيقات التي طورتها\n• 🌐 أضف روابط GitHub أو Portfolio\n• ⚡ أكد على خبرتك في حل المشكلات التقنية\n• 📊 اذكر قواعد البيانات والتقنيات التي تعرفها`;
-      } else if (analysis.estimatedField.includes('هندسة')) {
-        responseText += `⚙️ **للهندسة:**\n• 🖥️ اذكر البرامج الهندسية التي تستخدمها (AutoCAD, SolidWorks...)\n• 🏗️ أضف المشاريع الهندسية التي شاركت فيها\n• 📐 أكد على خبرتك في التصميم والتنفيذ\n• 🔬 اذكر التخصص الدقيق (مدني، كهرباء، ميكانيك...)\n• 📜 أضف الشهادات المهنية إن وجدت`;
-      } else if (analysis.estimatedField.includes('إدارة') || analysis.estimatedField.includes('أعمال')) {
-        responseText += `👔 **للإدارة والأعمال:**\n• 👥 اذكر عدد الموظفين الذين أدرتهم\n• 📈 أضف النتائج المحققة بأرقام ملموسة\n• 🎯 أكد على مهارات القيادة والتطوير\n• 💼 اذكر الإستراتيجيات التي نفذتها\n• 📊 أضف خبرتك في التحليل واتخاذ القرارات`;
-      } else if (analysis.estimatedField.includes('طب') || analysis.estimatedField.includes('صحي')) {
-        responseText += `🏥 **للمجال الطبي:**\n• 🩺 حدد تخصصك الطبي بدقة\n• 🏥 اذكر المستشفيات أو العيادات التي عملت بها\n• 📚 أضف الدورات الطبية والشهادات\n• 👨‍⚕️ أكد على خبرتك في التشخيص والعلاج\n• 🔬 اذكر الأبحاث الطبية إن وجدت`;
-      } else {
-        responseText += `✨ **نصائح عامة لمجالك:**\n• 📝 أضف خبراتك العملية بتفاصيل واضحة\n• 🏆 اذكر إنجازاتك بأرقام ملموسة\n• 🎯 أكد على المهارات المميزة لديك\n• 📚 أضف الدورات والتدريبات ذات الصلة\n• 🌟 اكتب عن مشاريعك الناجحة`;
+    if (intent === 'generate_summary' && parsed.content) {
+      result.content = parsed.content;
+      result.fillTarget = { fieldId: targetField ?? 'summary', value: parsed.content };
+    } else if (intent === 'write_responsibilities' && parsed.content) {
+      result.content = parsed.content;
+      result.fillTarget = { fieldId: targetField ?? 'responsibilities', value: parsed.content };
+    } else if (intent === 'write_achievements' && parsed.content) {
+      result.content = parsed.content;
+      result.fillTarget = { fieldId: targetField ?? 'achievements', value: parsed.content };
+    } else if (intent === 'improve_text' && parsed.content) {
+      result.content = parsed.content;
+      if (targetField) result.fillTarget = { fieldId: targetField, value: parsed.content };
+    } else if (intent === 'guided_generate' && parsed.content) {
+      result.content = parsed.content;
+      if (targetField) result.fillTarget = { fieldId: targetField, value: parsed.content };
+    } else if (intent === 'suggest_skills') {
+      result.technicalSkills = parsed.technicalSkills ?? [];
+      result.softSkills = parsed.softSkills ?? [];
+      if (targetField) {
+        const skills = targetField === 'softSkills' ? result.softSkills : result.technicalSkills;
+        result.fillTarget = { fieldId: targetField, value: skills };
       }
-      
-      responseText += `\n\n🤔 **أي قسم تحتاج مساعدة أكثر فيه؟**`;
     }
-  } else if (lowerMessage.includes('كيف') || lowerMessage.includes('ماذا') || lowerMessage.includes('أين')) {
-    if (analysis.estimatedField === 'تكنولوجيا المعلومات') {
-      responseText = `أفهم أنك تعمل في مجال ${analysis.estimatedField}! 💻\n\nإليك نصائح مخصصة:\n✅ أضف المشاريع البرمجية التي عملت عليها\n✅ اذكر التقنيات المتقنة (React, Node.js, Python)\n✅ أكد على المشكلات التي حللتها\n\nماذا تريد أن نركز عليه في بروفايلك؟`;
-      
-      suggestions = {
-        fields: { 
-          jobTitle: 'مطور برمجيات',
-          skills: ['JavaScript', 'React', 'Node.js']
-        },
-        confidence: 0.85,
-        source: 'Smart Analysis'
-      };
-    } else if (analysis.estimatedField === 'الهندسة') {
-      responseText = `رائع! مهندس ${analysis.experienceLevel} 🔧\n\nنصائح لبروفايل هندسي قوي:\n🎯 أضف المشاريع الهندسية التي شاركت فيها\n🎯 اذكر البرامج الهندسية التي تتقنها\n🎯 أكد على الحلول الابتكارية التي قدمتها\n\nما نوع الهندسة التي تتخصص فيها؟`;
-    } else {
-      responseText = `مرحباً! أراك ${analysis.experienceLevel} في مجالك 👋\n\nدعني أساعدك في:\n📝 صياغة خبراتك بطريقة احترافية\n📈 إبراز إنجازاتك بشكل جذاب\n🎯 تحسين فرص القبول في الوظائف\n\nأخبرني أكثر عن تخصصك!`;
-    }
-  } else if (lowerMessage.includes('مساعدة') || lowerMessage.includes('أريد') || lowerMessage.includes('بدي')) {
-    if (analysis.completedFields < 50) {
-      responseText = `أهلاً وسهلاً! 🤗\n\nأرى أنك بدأت بملء البيانات (${analysis.completedFields}% مكتمل)\n\nدعني أساعدك في:\n🔥 تسريع عملية الملء\n💡 اقتراح محتوى مناسب لتخصصك\n⚡ تحسين جودة المعلومات\n\nما الحقل الذي تحتاج مساعدة فيه؟`;
-    } else {
-      responseText = `ممتاز! ${analysis.completedFields}% مكتمل 🎉\n\nالآن يمكنني مساعدتك في:\n🚀 تحسين صياغة النصوص\n📊 إضافة تفاصيل مهمة\n✨ تنسيق المعلومات بطريقة احترافية\n\nأي قسم تريد أن نحسنه معاً؟`;
-    }
-  } else if (lowerMessage.includes('تحسين') || lowerMessage.includes('تطوير')) {
-    if (analysis.estimatedField === 'غير محدد') {
-      responseText = `عظيم! أحب روح التطوير فيك 💪\n\nهنا أهم النصائح لتطوير أي بروفايل مهني:\n\n📝 اكتب منصبك الوظيفي المطلوب بوضوح\n🎯 أضف مهاراتك التقنية والشخصية\n🏆 اذكر إنجازاتك بأرقام ملموسة\n📚 أدرج الدورات والشهادات المكتسبة\n🔗 ربط خبراتك بمتطلبات السوق\n\nما أكثر شيء تريد تطويره في بروفايلك؟`;
-    } else {
-      responseText = `عظيم! أحب روح التطوير فيك 💪\n\nبناء على تخصصك في ${analysis.estimatedField}:\n\n📚 اقترح عليك إضافة دورات تدريبية حديثة\n🏆 إبراز الإنجازات بأرقام ملموسة\n🔗 ربط خبراتك بمتطلبات السوق المحلي\n\nما أكثر شيء تريد تطويره في بروفايلك؟`;
-    }
-  } else {
-    // رد عام ذكي
-    if (analysis.estimatedField === 'غير محدد') {
-      responseText = `أهلاً بك! 😊\n\nأرى أنك بدأت في بناء بروفايلك المهني!\n\nدعني أساعدك في:\n💼 تحديد مجال تخصصك\n📝 كتابة معلومات احترافية\n🎯 إبراز نقاط القوة\n🚀 تحسين فرص القبول في الوظائف\n\nأخبرني عن مجال عملك أو دراستك!`;
-    } else {
-      responseText = `أهلاً بك! 😊\n\nتخصصك في ${analysis.estimatedField} مجال رائع!\nمستوى خبرتك: ${analysis.experienceLevel}\nالتركيز الحالي: ${analysis.currentFocus}\n\nكيف يمكنني مساعدتك اليوم؟\n💼 تحسين المحتوى الموجود؟\n📝 كتابة أقسام جديدة؟\n🎯 نصائح للسوق المحلي؟`;
-    }
+
+    return result;
+  } catch {
+    return { text: raw };
+  }
+}
+
+// ─── Guided field hint resolver ───────────────────────────────────────────────
+function resolveGuidedFieldHint(targetField: string): string {
+  if (targetField === 'summary') {
+    return 'النبذة الشخصية: 3-4 جمل، 60-90 كلمة، بدون ضمير المتكلم "أنا"، تبدأ بالمسمى الوظيفي أو الكفاءة.';
+  }
+  if (targetField.includes('responsibilities')) {
+    return 'المسؤوليات: 4-6 نقاط تبدأ بـ •، كل نقطة تبدأ بفعل نشط (أدار، نفّذ، طوّر، قاد...).';
+  }
+  if (targetField.includes('achievements') || targetField.includes('details')) {
+    return 'الإنجازات: 3-5 نقاط بأسلوب STAR (فعل ماضٍ + إجراء + نتيجة قابلة للقياس بأرقام).';
+  }
+  if (targetField.includes('description')) {
+    return 'وصف المشروع: 2-3 جمل تشرح ماهية المشروع، نوعه، دورك فيه، الأدوات أو الموارد المستخدمة (تقنية أو غير تقنية)، والنتيجة أو التأثير. لا تفترض أن المشروع برمجي — اعتمد على إجابات المستخدم فقط واكتب بأسلوب يناسب مجاله الفعلي.';
+  }
+  if (targetField === 'targetJobTitle') {
+    return 'المسمى الوظيفي: يجب أن يكون احترافياً، واضحاً، ومطابقاً للمسميات الشائعة في سوق العمل.';
+  }
+  if (targetField.includes('skill') || targetField === 'skills') {
+    return 'المهارات: اذكر مهارات محددة وقابلة للقياس، مع الأدوات والتقنيات المطلوبة في السوق.';
+  }
+  if (targetField === 'volunteerWork') {
+    return 'العمل التطوعي: اذكر المنظمة، دورك، والأثر الذي أحدثته (أرقام إن أمكن).';
+  }
+  if (targetField === 'interests') {
+    return 'الاهتمامات: اجعلها مهنية وذات صلة بمجال العمل حين الإمكان.';
+  }
+  return 'أنتج محتوى احترافياً مخصصاً للحقل المطلوب.';
+}
+
+// ─── Profile summary builder ──────────────────────────────────────────────────
+function buildProfileSummary(form: FormSnapshot): string {
+  const lines: string[] = [];
+
+  if (form.fullName) lines.push(`الاسم: ${form.fullName}`);
+  if (form.targetJobTitle) lines.push(`المسمى المستهدف: ${form.targetJobTitle}`);
+  if (form.targetCompany) lines.push(`الشركة المستهدفة: ${form.targetCompany}`);
+  if (form.city) lines.push(`الموقع: ${form.city}، ${form.country ?? 'الأردن'}`);
+  lines.push(`المستوى: ${form.isRecentGraduate ? 'حديث التخرج' : 'لديه خبرة عملية'}`);
+  if (form.summary) lines.push(`النبذة الحالية: ${form.summary.slice(0, 150)}`);
+
+  if (form.education?.length) {
+    const e = form.education[0];
+    lines.push(`التعليم: ${e.degree ?? ''} ${e.major ?? ''} — ${e.university ?? ''} (${e.graduationDate ?? ''})`);
   }
 
-  return {
-    text: responseText,
-    suggestion: suggestions
+  if (form.experience?.length) {
+    lines.push(`الخبرات (${form.experience.length}):`);
+    form.experience.slice(0, 2).forEach(exp => {
+      lines.push(`  • ${exp.jobTitle ?? ''} في ${exp.companyName ?? exp.organization ?? ''} (${exp.startDate ?? ''} - ${exp.isPresent ? 'حتى الآن' : exp.endDate ?? ''})`);
+      if (exp.responsibilities) lines.push(`    المسؤوليات: ${exp.responsibilities.slice(0, 100)}...`);
+    });
+  }
+
+  const allSkills = [...(form.technicalSkills ?? []), ...(form.softSkills ?? [])];
+  if (allSkills.length) lines.push(`المهارات: ${allSkills.join(', ')}`);
+
+  if (form.certifications?.length) {
+    lines.push(`الشهادات: ${form.certifications.map(c => c.certName ?? c.title ?? '').filter(Boolean).join(', ')}`);
+  }
+
+  if (form.projects?.length) {
+    lines.push(`المشاريع: ${form.projects.map(p => p.projectName ?? p.title ?? '').filter(Boolean).join(', ')}`);
+  }
+
+  return lines.join('\n') || 'لم يتم إدخال بيانات بعد';
+}
+
+function stepName(step: number): string {
+  const names: Record<number, string> = {
+    1: 'المسمى الوظيفي المستهدف',
+    2: 'المعلومات الشخصية',
+    3: 'الهدف الوظيفي / النبذة',
+    6: 'المهارات',
+    7: 'الدورات والشهادات',
+    8: 'المشاريع',
+    9: 'الإنجازات',
+    10: 'معلومات إضافية',
   };
+  return names[step] ?? `الخطوة ${step}`;
+}
+
+// ─── Offline fallback ─────────────────────────────────────────────────────────
+function fallbackResponse(message: string, intent: Intent | undefined, form: FormSnapshot): Record<string, unknown> {
+  const job = form.targetJobTitle || 'المسمى المستهدف';
+  const name = form.fullName || '';
+
+  switch (intent) {
+    case 'generate_summary':
+      return {
+        text: 'مفتاح OPENAI_API_KEY غير موجود. إليك نموذج للنبذة يمكنك تعديله:',
+        content: `${name ? `${name} هو` : 'متخصص في'} ${job}، يتمتع بخلفية أكاديمية قوية وشغف بالتطوير المهني المستمر. يسعى لتقديم قيمة مضافة للمؤسسات من خلال مهاراته التقنية وقدرته على العمل ضمن الفريق وتحقيق الأهداف في الوقت المحدد.`,
+        tips: ['أضف سنوات الخبرة', 'اذكر أبرز مهاراتك', 'خصص للشركة المستهدفة'],
+        fillTarget: { fieldId: 'summary', value: '' },
+      };
+    case 'suggest_skills':
+      return {
+        text: 'أضف OPENAI_API_KEY في .env.local للحصول على اقتراحات مخصصة.',
+        technicalSkills: ['Microsoft Office', 'تحليل البيانات', 'إدارة المشاريع'],
+        softSkills: ['العمل الجماعي', 'حل المشكلات', 'التواصل الفعّال', 'إدارة الوقت'],
+        tips: ['أضف مهارات تقنية خاصة بمجالك'],
+      };
+    default:
+      return {
+        text: `مرحباً${name ? ` ${name}` : ''}! أضف OPENAI_API_KEY في ملف .env.local:\n\nOPENAI_API_KEY=sk-...\n\nبعدها سأكون قادراً على مساعدتك بشكل كامل.`,
+      };
+  }
 }
