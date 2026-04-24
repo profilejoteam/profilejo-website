@@ -111,12 +111,12 @@ export default function HeroSection() {
           >
             <div className="flex items-center justify-center lg:justify-start gap-4 mb-4">
               <img 
-                src="../logo+.png" 
-                alt="بروفايل" 
+                src="/logo.png" 
+                alt="بروفايل جو" 
                 className="w-16 h-16 md:w-20 md:h-20"
               />
               <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                بروفايل
+                بروفايل جو
               </h1>
             </div>
           </motion.div>

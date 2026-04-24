@@ -18,7 +18,7 @@ interface SystemSettings {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SystemSettings>({
-    site_name: 'بروفايل - هوية مهنية كاملة',
+    site_name: 'بروفايل جو - هوية مهنية كاملة',
     site_description: 'هوية مهنية كاملة تجهزك لسوق العمل',
     admin_email: 'admin@profile.jo',
     auto_approval: false,
@@ -57,7 +57,7 @@ export default function SettingsPage() {
   const resetSettings = () => {
     if (confirm('هل أنت متأكد من إعادة تعيين جميع الإعدادات؟')) {
       setSettings({
-        site_name: 'بروفايل - هوية مهنية كاملة',
+        site_name: 'بروفايل جو - هوية مهنية كاملة',
         site_description: 'هوية مهنية كاملة تجهزك لسوق العمل',
         admin_email: 'admin@profile.jo',
         auto_approval: false,

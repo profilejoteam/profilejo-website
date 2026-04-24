@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FaBars, FaTimes, FaUser, FaHome, FaQuestionCircle, FaEnvelope, FaCog, FaSignOutAlt } from 'react-icons/fa'
@@ -118,22 +119,28 @@ export default function Navbar() {
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href="/" className="flex items-center gap-2 group">
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="w-12 h-12 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl flex items-center justify-center shadow-lg ring-2 ring-white/20"
+              className="w-10 h-10 relative"
             >
-              <span className="text-white font-bold text-xl">ب</span>
+              <Image
+                src="/logo.png"
+                alt="بروفايل جو"
+                fill
+                className="object-contain"
+                priority
+              />
             </motion.div>
-            <motion.h1
+            <motion.span
               whileHover={{ x: 5 }}
-              className={`text-2xl font-bold transition-colors duration-300 ${
+              className={`text-xl font-bold transition-colors duration-300 ${
                 scrolled ? 'text-gray-900' : 'text-white'
-              } group-hover:text-primary-500`}
+              } group-hover:text-primary-400`}
             >
-              بروفايل
-            </motion.h1>
+              بروفايل جو
+            </motion.span>
           </Link>
 
           {/* Desktop Navigation */}

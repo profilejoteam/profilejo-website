@@ -4,13 +4,13 @@ import Navbar from '@/components/Navbar'
 
 export const metadata: Metadata = {
   metadataBase: new URL('http://localhost:3000'),
-  title: 'بروفايل - هوية مهنية كاملة',
+  title: 'بروفايل جو - هوية مهنية كاملة',
   description: 'هوية مهنية كاملة تجهزك لسوق العمل. سجل الآن وابدأ ببناء بروفايلك المهني',
-  keywords: 'بروفايل, سيرة ذاتية, وظائف, العمل, مهني, LinkedIn',
+  keywords: 'بروفايل جو, سيرة ذاتية, وظائف, العمل, مهني, LinkedIn',
   authors: [{ name: 'Profile Team' }],
   robots: 'index, follow',
   openGraph: {
-    title: 'بروفايل - هوية مهنية كاملة',
+    title: 'بروفايل جو - هوية مهنية كاملة',
     description: 'هوية مهنية كاملة تجهزك لسوق العمل',
     type: 'website',
     locale: 'ar_SA',

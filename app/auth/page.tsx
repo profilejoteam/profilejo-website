@@ -89,10 +89,8 @@ export default function AuthPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-xl">ب</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">بروفايل</h1>
+            <img src="/logo.png" alt="بروفايل جو" className="w-12 h-12 object-contain" />
+            <h1 className="text-2xl font-bold text-gray-900">بروفايل جو</h1>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             {isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}
