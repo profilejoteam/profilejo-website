@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { FaArrowRight, FaArrowLeft, FaCheck } from 'react-icons/fa'
 import PricingSection from './PricingSection'
 import PaymentSection from './PaymentSection'
@@ -132,13 +132,44 @@ interface FormData {
 
 interface PurchaseFlowProps {
   onSubmit: (data: FormData & { selectedPlan: Plan; selectedPayment: PaymentMethod }) => void
+  userId?: string
 }
 
-export default function PurchaseFlow({ onSubmit }: PurchaseFlowProps) {
+export default function PurchaseFlow({ onSubmit, userId }: PurchaseFlowProps) {
+  // Stable key — won't change even if userId arrives late
+  const PURCHASE_KEY = useRef(`profilejo_purchase_state${userId ? `_${userId}` : ''}`).current
+
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null)
   const [formData, setFormData] = useState<FormData | null>(null)
+  const [initialized, setInitialized] = useState(false)
+
+  // ── Load saved plan/payment/step from localStorage on mount ──
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PURCHASE_KEY)
+      if (saved) {
+        const { step, plan, payment } = JSON.parse(saved)
+        if (plan) setSelectedPlan(plan)
+        if (payment) setSelectedPayment(payment)
+        if (typeof step === 'number') setCurrentStep(step)
+      }
+    } catch { /* ignore */ }
+    setInitialized(true)  // ✔️ mark ready — save effect now allowed to run
+  }, [PURCHASE_KEY])
+
+  // ── Auto-save ONLY after initialization (prevents overwriting on mount) ──
+  useEffect(() => {
+    if (!initialized) return
+    try {
+      localStorage.setItem(PURCHASE_KEY, JSON.stringify({
+        step: currentStep,
+        plan: selectedPlan,
+        payment: selectedPayment,
+      }))
+    } catch { /* ignore */ }
+  }, [currentStep, selectedPlan, selectedPayment, PURCHASE_KEY, initialized])
 
   const steps = [
     { id: 1, title: 'اختر الخطة', description: 'اختر الخطة المناسبة لاحتياجاتك' },
@@ -163,9 +194,11 @@ export default function PurchaseFlow({ onSubmit }: PurchaseFlowProps) {
   const handleFinalSubmit = (data?: FormData) => {
     const finalData = data || formData
     if (selectedPlan && selectedPayment && finalData) {
+      // Clear saved purchase state on submit
+      try { localStorage.removeItem(PURCHASE_KEY) } catch { }
       // Handle payment flow before submitting
       handlePaymentFlow()
-      
+
       onSubmit({
         ...finalData,
         selectedPlan,
@@ -273,7 +306,7 @@ export default function PurchaseFlow({ onSubmit }: PurchaseFlowProps) {
                   </div>
                 </div>
               </div>
-              <ComprehensiveForm onSubmit={handleFormSubmit} />
+              <ComprehensiveForm onSubmit={handleFormSubmit} userId={userId} />
             </div>
           )}
         </motion.div>

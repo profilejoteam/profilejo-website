@@ -256,22 +256,55 @@ export default function FormPage() {
         updated_at: new Date().toISOString()
       }
 
-      console.log('Saving profile data:', profileData)
-
-      // Save to Supabase with comprehensive data
-      const { data: savedData, error } = await supabase
+      // ── 1. Upsert profiles (always keep latest profile data) ──
+      const { error: profileError } = await supabase
         .from('profiles')
         .upsert(profileData)
-        .select()
 
-      if (error) {
-        console.error('Error saving data:', error)
-        alert(`حدث خطأ أثناء حفظ البيانات: ${error.message}. يرجى المحاولة مرة أخرى.`)
+      if (profileError) {
+        console.error('Error saving profile:', profileError)
+        alert(`حدث خطأ أثناء حفظ البيانات: ${profileError.message}. يرجى المحاولة مرة أخرى.`)
         return
       }
 
-      console.log('Data saved successfully:', savedData)
-      console.log('Purchase submitted and saved:', data)
+      // ── 2. INSERT a new order row (one row per submission) ──
+      const orderData = {
+        user_id: user.id,
+        plan_id: data.selectedPlan.id,
+        plan_name: data.selectedPlan.name,
+        plan_price: data.selectedPlan.price,
+        plan_currency: data.selectedPlan.currency,
+        payment_method: data.selectedPayment.id,
+        payment_status: 'pending',
+        photo_url: photoUrl,
+        portfolio_files: uploadedFiles,
+        profile_snapshot: {
+          full_name: data.fullName,
+          email: data.email,
+          phone: data.phone,
+          city: data.city,
+          targetJobTitle: (data as any).targetJobTitle || null,
+          education: data.education || [],
+          experience: data.experience || [],
+          projects: data.projects || [],
+          skills: data.skills || [],
+          languages: data.languages || [],
+          certifications: data.certifications || [],
+          summary: (data as any).summary || null,
+          volunteerWork: (data as any).volunteerWork || null,
+          interests: (data as any).interests || null,
+        },
+      }
+
+      const { error: orderError } = await supabase
+        .from('orders')
+        .insert(orderData)
+
+      if (orderError) {
+        // Non-fatal — profile is already saved, just log it
+        console.error('Error creating order record:', orderError)
+      }
+
       setSubmittedData(data)
       setIsSubmitted(true)
     } catch (error) {
@@ -298,7 +331,7 @@ export default function FormPage() {
   return (
     <div className="min-h-screen bg-gray-50 pt-20">
       {/* Purchase Flow */}
-      <PurchaseFlow onSubmit={handlePurchaseSubmit} />
+      <PurchaseFlow onSubmit={handlePurchaseSubmit} userId={user?.id} />
     </div>
   )
 }

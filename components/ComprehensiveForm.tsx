@@ -1,7 +1,8 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 import { FaUser, FaGraduationCap, FaBriefcase, FaLink, FaArrowRight, FaArrowLeft, FaPlus, FaTrash, FaUpload, FaCheck, FaProjectDiagram, FaCogs, FaLanguage, FaCertificate, FaCamera } from 'react-icons/fa'
 import { FloatingAssistant, QuestionSequence } from './floating-assistant'
 
@@ -125,6 +126,7 @@ interface ComprehensiveFormData {
 
 interface ComprehensiveFormProps {
   onSubmit: (data: ComprehensiveFormData) => void
+  userId?: string
 }
 
 const jordanianCities = [
@@ -159,9 +161,25 @@ const jobTypes = [
   'Full-time', 'Part-time', 'Internship', 'Remote', 'Hybrid'
 ]
 
-export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) {
+const DRAFT_KEY = 'profilejo_form_draft'
+
+// Strip File objects before saving to localStorage (Files can't be serialized)
+function stripFiles(data: ComprehensiveFormData): Omit<ComprehensiveFormData, 'photo' | 'portfolioFiles'> & { photo: undefined; portfolioFiles: [] } {
+  return {
+    ...data,
+    photo: undefined,
+    portfolioFiles: [],
+    education: data.education.map(({ diplomaFile: _d, ...rest }) => rest) as any,
+    experience: data.experience.map(({ proofFile: _p, ...rest }) => rest) as any,
+    certifications: data.certifications.map(({ certificateFile: _c, ...rest }) => rest) as any,
+    projects: data.projects.map(({ files: _f, ...rest }) => ({ ...rest, files: [] })) as any,
+  }
+}
+
+export default function ComprehensiveForm({ onSubmit, userId }: ComprehensiveFormProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [showOpeningQuestion, setShowOpeningQuestion] = useState(true)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [formData, setFormData] = useState<ComprehensiveFormData>({
     isRecentGraduate: null,
     targetJobTitle: '',
@@ -198,6 +216,69 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
     volunteerWork: '',
     interests: '',
   })
+
+  // ── Load draft: Supabase first, then localStorage fallback ──
+  useEffect(() => {
+    const loadDraft = async () => {
+      // 1️⃣ Try Supabase
+      if (userId) {
+        try {
+          const { data } = await supabase
+            .from('form_drafts')
+            .select('draft_json')
+            .eq('user_id', userId)
+            .single()
+          if (data?.draft_json) {
+            const { formData: savedForm, step, openingDone } = data.draft_json
+            if (savedForm) setFormData(prev => ({ ...prev, ...savedForm }))
+            if (typeof step === 'number') setCurrentStep(step)
+            if (typeof openingDone === 'boolean' && openingDone) setShowOpeningQuestion(false)
+            setSaveStatus('saved')
+            return // don’t load localStorage if Supabase has data
+          }
+        } catch { /* ignore */ }
+      }
+      // 2️⃣ Fallback to localStorage
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY)
+        if (!saved) return
+        const { formData: savedForm, step, openingDone } = JSON.parse(saved)
+        if (savedForm) setFormData(prev => ({ ...prev, ...savedForm }))
+        if (typeof step === 'number') setCurrentStep(step)
+        if (typeof openingDone === 'boolean' && openingDone) setShowOpeningQuestion(false)
+      } catch { /* ignore corrupted data */ }
+    }
+    loadDraft()
+  }, [userId])
+
+  // ── Auto-save: localStorage immediately + Supabase debounced 2s ──
+  useEffect(() => {
+    const draft = {
+      formData: stripFiles(formData),
+      step: currentStep,
+      openingDone: !showOpeningQuestion,
+      savedAt: new Date().toISOString(),
+    }
+    // localStorage — always instant
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)) } catch { }
+    // Supabase — debounced
+    if (!userId) return
+    setSaveStatus('saving')
+    const timer = setTimeout(async () => {
+      try {
+        const { error } = await supabase
+          .from('form_drafts')
+          .upsert(
+            { user_id: userId, draft_json: draft, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          )
+        setSaveStatus(error ? 'error' : 'saved')
+      } catch {
+        setSaveStatus('error')
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [formData, currentStep, showOpeningQuestion, userId])
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const totalSteps = 10
@@ -342,6 +423,10 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
 
   const handleSubmit = () => {
     if (validateCurrentStep()) {
+      localStorage.removeItem(DRAFT_KEY)
+      if (userId) {
+        supabase.from('form_drafts').delete().eq('user_id', userId).then(() => {})
+      }
       onSubmit(formData)
     }
   }
@@ -1857,6 +1942,19 @@ export default function ComprehensiveForm({ onSubmit }: ComprehensiveFormProps) 
           setShowOpeningQuestion(false)
         }}
       />
+
+      {/* Save status indicator */}
+      {userId && saveStatus !== 'idle' && (
+        <div className={`flex items-center gap-1.5 text-xs mb-3 transition-all ${
+          saveStatus === 'saved' ? 'text-green-600' :
+          saveStatus === 'saving' ? 'text-gray-400' : 'text-red-500'
+        }`}>
+          {saveStatus === 'saving' && <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
+          {saveStatus === 'saved' && <span>✓</span>}
+          {saveStatus === 'error' && <span>⚠</span>}
+          {saveStatus === 'saving' ? 'جاري الحفظ...' : saveStatus === 'saved' ? 'تم الحفظ تلقائياً ✓' : 'تعذّر الحفظ'}
+        </div>
+      )}
 
 
 
